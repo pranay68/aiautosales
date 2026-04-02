@@ -1,0 +1,10 @@
+{
+  "name": "@aiautosales/web",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "dev": "node server.mjs"
+  }
+}
+

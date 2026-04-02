@@ -1,0 +1,24 @@
+{
+  "name": "@aiautosales/orchestrator",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@aiautosales/db": "0.1.0",
+    "@aiautosales/dialer-service": "0.1.0",
+    "@aiautosales/domain-models": "0.1.0",
+    "@aiautosales/evaluation-worker": "0.1.0",
+    "@aiautosales/live-tool-service": "0.1.0",
+    "@aiautosales/research-worker": "0.1.0",
+    "@aiautosales/shared-events": "0.1.0",
+    "@aiautosales/strategy-worker": "0.1.0",
+    "@aiautosales/telemetry": "0.1.0",
+    "@aiautosales/voice-gateway": "0.1.0"
+  }
+}
+

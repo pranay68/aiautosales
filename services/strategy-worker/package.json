@@ -1,0 +1,19 @@
+{
+  "name": "@aiautosales/strategy-worker",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@aiautosales/azure-openai-client": "0.1.0",
+    "@aiautosales/db": "0.1.0",
+    "@aiautosales/domain-models": "0.1.0",
+    "@aiautosales/prompt-kits": "0.1.0",
+    "@aiautosales/shared-events": "0.1.0",
+    "@aiautosales/telemetry": "0.1.0"
+  }
+}

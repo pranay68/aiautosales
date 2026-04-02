@@ -1,0 +1,43 @@
+{
+  "name": "aiautosales",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev:api": "npm run dev -w @aiautosales/app-api",
+    "dev:temporal-worker": "npm run dev -w @aiautosales/temporal-worker",
+    "dev:bridge-gateway": "npm run dev -w @aiautosales/bridge-gateway",
+    "dev:web": "npm run dev -w @aiautosales/web",
+    "dev": "npm run dev:api",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "validate:azure-realtime": "tsx scripts/validate-azure-realtime.ts",
+    "validate:bridge-config": "tsx scripts/validate-bridge-config.ts",
+    "validate:sonetel-config": "tsx scripts/validate-sonetel-config.ts",
+    "refresh:sonetel-token": "tsx scripts/refresh-sonetel-token.ts",
+    "test:sonetel-outbound": "tsx scripts/test-sonetel-outbound.ts"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.6.0",
+    "@types/pg": "^8.20.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@temporalio/client": "^1.15.0",
+    "@temporalio/worker": "^1.15.0",
+    "@temporalio/workflow": "^1.15.0",
+    "dotenv": "^17.3.1",
+    "openai": "^6.33.0",
+    "pg": "^8.20.0",
+    "ws": "^8.20.0"
+  }
+}

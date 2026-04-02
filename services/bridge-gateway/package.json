@@ -1,0 +1,23 @@
+{
+  "name": "@aiautosales/bridge-gateway",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@aiautosales/azure-openai-client": "0.1.0",
+    "@aiautosales/config": "0.1.0",
+    "@aiautosales/db": "0.1.0",
+    "@aiautosales/domain-models": "0.1.0",
+    "@aiautosales/prompt-kits": "0.1.0",
+    "@aiautosales/telemetry": "0.1.0",
+    "@aiautosales/voice-gateway": "0.1.0",
+    "express": "^5.1.0",
+    "ws": "^8.20.0"
+  }
+}

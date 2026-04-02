@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Auto Sales</title>
+    <style>
+      :root { --bg:#0d1321; --panel:#16213e; --text:#f5f7ff; --muted:#9fb3c8; --accent:#ff9f1c; }
+      body { margin:0; font-family:Georgia,serif; background:radial-gradient(circle at top,#1d2d50,var(--bg)); color:var(--text); }
+      main { max-width:980px; margin:0 auto; padding:48px 20px 72px; }
+      section { background:rgba(22,33,62,.9); border:1px solid rgba(255,255,255,.08); border-radius:20px; padding:24px; margin-bottom:20px; }
+      input, textarea, button { width:100%; box-sizing:border-box; margin-top:8px; margin-bottom:14px; border-radius:10px; border:1px solid rgba(255,255,255,.14); padding:12px 14px; font:inherit; }
+      button { background:var(--accent); color:#111; font-weight:bold; cursor:pointer; }
+      pre { white-space:pre-wrap; color:var(--muted); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>AI Auto Sales</h1>
+      <p>Direct-mode alpha surface. Start the API on <code>localhost:4000</code>.</p>
+      <section>
+        <h2>Create product</h2>
+        <form id="product-form">
+          <input name="name" placeholder="Product name" required />
+          <textarea name="description" placeholder="Description" required></textarea>
+          <textarea name="offerSummary" placeholder="Offer summary" required></textarea>
+          <textarea name="icpSummary" placeholder="ICP summary" required></textarea>
+          <button type="submit">Create product</button>
+        </form>
+        <pre id="product-output"></pre>
+      </section>
+      <section>
+        <h2>Run direct call workflow</h2>
+        <form id="direct-form">
+          <input name="productId" placeholder="Product ID" required />
+          <input name="companyName" placeholder="Company name" required />
+          <input name="companyWebsite" placeholder="Company website" />
+          <input name="phoneNumber" placeholder="Phone number" required />
+          <input name="contactName" placeholder="Contact name" />
+          <input name="contactTitle" placeholder="Contact title" />
+          <textarea name="notes" placeholder="Operator notes"></textarea>
+          <button type="submit">Run direct mode</button>
+        </form>
+        <pre id="direct-output"></pre>
+      </section>
+    </main>
+    <script>
+      async function post(path, payload) {
+        const response = await fetch(`http://localhost:4000${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        return response.json();
+      }
+      document.getElementById("product-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = new FormData(event.target);
+        const result = await post("/products", Object.fromEntries(form.entries()));
+        document.getElementById("product-output").textContent = JSON.stringify(result, null, 2);
+      });
+      document.getElementById("direct-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = new FormData(event.target);
+        const result = await post("/direct-calls", Object.fromEntries(form.entries()));
+        document.getElementById("direct-output").textContent = JSON.stringify(result, null, 2);
+      });
+    </script>
+  </body>
+  </html>
