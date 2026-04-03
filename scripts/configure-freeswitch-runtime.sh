@@ -40,7 +40,7 @@ install -d /usr/local/freeswitch/conf/dialplan/public
 cat >/usr/local/freeswitch/conf/dialplan/public/ai-bridge.xml <<'EOF'
 <include>
   <extension name="ai-bridge">
-    <condition field="destination_number" expression="^agent$">
+    <condition field="destination_number" expression="^.*$">
       <action application="answer"/>
       <action application="system" data="/usr/local/freeswitch/scripts/claim-bridge-session.sh ${uuid}"/>
       <action application="park"/>
