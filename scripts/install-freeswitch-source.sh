@@ -15,6 +15,7 @@ apt-get install -y \
   libssl-dev \
   zlib1g-dev \
   libevent-dev \
+  libspandsp3-dev \
   libspeexdsp-dev \
   libldns-dev \
   liblua5.4-dev \
@@ -23,6 +24,7 @@ apt-get install -y \
   libpcre3-dev \
   libedit-dev \
   libsqlite3-dev \
+  uuid-dev \
   libjpeg-dev \
   libcurl4-openssl-dev \
   yasm
