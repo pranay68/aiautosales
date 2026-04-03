@@ -28,6 +28,10 @@ if ! grep -q 'mod_audio_stream' /usr/local/freeswitch/conf/autoload_configs/modu
   sed -i '/<\/modules>/i \    <load module="mod_audio_stream"/>' /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml
 fi
 
+public_host="aiautosales-freeswitch.westus2.cloudapp.azure.com"
+sed -i "s/auto-nat/host:${public_host}/g" /usr/local/freeswitch/conf/sip_profiles/internal.xml
+sed -i "s/auto-nat/host:${public_host}/g" /usr/local/freeswitch/conf/sip_profiles/external.xml
+
 pkill -f '^/usr/local/freeswitch/bin/freeswitch' || true
 sleep 2
 
