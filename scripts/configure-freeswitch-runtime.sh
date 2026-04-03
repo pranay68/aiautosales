@@ -49,6 +49,43 @@ cat >/usr/local/freeswitch/conf/dialplan/public/00_ai_bridge.xml <<'EOF'
 </include>
 EOF
 
+install -d /usr/local/freeswitch/scripts
+cat >/usr/local/freeswitch/scripts/claim-bridge-session.sh <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+uuid="${1:-}"
+if [[ -z "${uuid}" ]]; then
+  echo "missing uuid" >&2
+  exit 1
+fi
+
+response="$(curl -fsS -X POST \
+  -H 'Content-Type: application/json' \
+  -H "X-Correlation-Id: ${uuid}" \
+  -d "{\"callUuid\":\"${uuid}\"}" \
+  "http://127.0.0.1:4040/bridge-sessions/claim-next")"
+
+media_ws_url="$(printf '%s' "$response" | jq -r '.mediaWebsocketUrl // empty')"
+bridge_session_id="$(printf '%s' "$response" | jq -r '.bridgeSession.id // empty')"
+call_session_id="$(printf '%s' "$response" | jq -r '.bridgeSession.callSessionId // empty')"
+prospect_id="$(printf '%s' "$response" | jq -r '.bridgeSession.prospectId // empty')"
+
+if [[ -z "${media_ws_url}" || -z "${bridge_session_id}" ]]; then
+  echo "bridge claim failed: ${response}" >&2
+  exit 1
+fi
+
+meta="$(jq -nc \
+  --arg bridgeSessionId "${bridge_session_id}" \
+  --arg callSessionId "${call_session_id}" \
+  --arg prospectId "${prospect_id}" \
+  '{bridgeSessionId:$bridgeSessionId, callSessionId:$callSessionId, prospectId:$prospectId}')"
+
+/usr/local/freeswitch/bin/fs_cli -x "uuid_audio_stream ${uuid} start ${media_ws_url} mono 8000 '${meta}'"
+EOF
+chmod +x /usr/local/freeswitch/scripts/claim-bridge-session.sh
+
 if ! grep -q 'mod_audio_stream' /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml; then
   sed -i '/<\/modules>/i \    <load module="mod_audio_stream"/>' /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml
 fi
