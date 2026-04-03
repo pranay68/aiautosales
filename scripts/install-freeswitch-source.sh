@@ -124,7 +124,6 @@ PY
 cat > modules.conf <<'CONF'
 applications/mod_commands
 applications/mod_dptools
-applications/mod_spandsp
 codecs/mod_opus
 dialplans/mod_dialplan_xml
 endpoints/mod_sofia
