@@ -107,14 +107,33 @@ async function requestJsonWithCurl(input: {
   headers: Record<string, string>;
   body: Record<string, unknown>;
 }): Promise<CurlJsonResponse> {
-  if (process.platform === "win32") {
-    const response = await fetch(input.endpoint, {
-      method: input.method,
-      headers: input.headers,
-      body: JSON.stringify(input.body)
-    });
+  const statusMarker = "__SONETEL_HTTP_STATUS__";
 
-    const bodyText = await response.text();
+  if (process.platform === "win32") {
+    const args = [
+      "-sS",
+      "--noproxy",
+      "*",
+      "-X",
+      input.method,
+      ...Object.entries(input.headers).flatMap(([key, value]) => ["-H", `${key}: ${value}`]),
+      "--data-raw",
+      JSON.stringify(input.body),
+      "-w",
+      `\\n${statusMarker}:%{http_code}`,
+      input.endpoint
+    ];
+
+    const { stdout } = await execFileAsync("curl", args, { maxBuffer: 1024 * 1024 });
+    const markerIndex = stdout.lastIndexOf(statusMarker);
+    if (markerIndex < 0) {
+      throw new Error(`Sonetel curl request did not return an HTTP status marker: ${stdout}`);
+    }
+
+    const bodyText = stdout.slice(0, markerIndex).trim();
+    const statusText = stdout.slice(markerIndex + statusMarker.length + 1).trim();
+    const statusCode = Number.parseInt(statusText, 10);
+
     let bodyJson: unknown = undefined;
     if (bodyText) {
       try {
@@ -125,21 +144,25 @@ async function requestJsonWithCurl(input: {
     }
 
     return {
-      statusCode: response.status,
+      statusCode: Number.isNaN(statusCode) ? 0 : statusCode,
       bodyText,
       bodyJson
     };
   }
 
-  const statusMarker = "__SONETEL_HTTP_STATUS__";
   const shellQuote = (value: string) => `'${value.replace(/'/g, `'\"'\"'`)}'`;
+  const payload = JSON.stringify(input.body);
   const command = [
+    "payload=$(cat <<'JSON'",
+    payload,
+    "JSON",
+    ");",
     "curl -sS --noproxy '*'",
     "-X",
     input.method,
     ...Object.entries(input.headers).flatMap(([key, value]) => ["-H", shellQuote(`${key}: ${value}`)]),
     "--data-raw",
-    shellQuote(JSON.stringify(input.body)),
+    "\"$payload\"",
     "-w",
     shellQuote(`\\n${statusMarker}:%{http_code}`),
     shellQuote(input.endpoint)
