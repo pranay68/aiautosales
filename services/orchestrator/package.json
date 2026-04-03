@@ -13,6 +13,7 @@
     "@aiautosales/dialer-service": "0.1.0",
     "@aiautosales/domain-models": "0.1.0",
     "@aiautosales/evaluation-worker": "0.1.0",
+    "@aiautosales/bridge-gateway": "0.1.0",
     "@aiautosales/live-tool-service": "0.1.0",
     "@aiautosales/research-worker": "0.1.0",
     "@aiautosales/shared-events": "0.1.0",
@@ -21,4 +22,3 @@
     "@aiautosales/voice-gateway": "0.1.0"
   }
 }
-

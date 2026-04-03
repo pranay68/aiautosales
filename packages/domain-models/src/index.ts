@@ -119,14 +119,39 @@ export type CallSession = {
   createdAt: string;
 };
 
+export type BridgeSession = {
+  id: EntityId;
+  callSessionId: EntityId;
+  prospectId: EntityId;
+  status: "created" | "connecting" | "connected" | "streaming" | "completed" | "failed" | "closed";
+  transport: "sip" | "websocket" | "simulation";
+  agentDestination: string;
+  voiceSessionId?: string;
+  lastEvent?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type FollowupTask = {
   id: EntityId;
   prospectId: EntityId;
   callSessionId: EntityId;
-  channel: "email" | "sms" | "callback";
+  channel: "email" | "sms" | "callback" | "meeting";
   summary: string;
   dueAt: string;
   status: "open" | "completed";
+  createdAt: string;
+};
+
+export type SequencePlan = {
+  id: EntityId;
+  prospectId: EntityId;
+  callSessionId: EntityId;
+  outcome: string;
+  recommendedChannel: FollowupTask["channel"];
+  nextState: LeadState;
+  summary: string;
+  nextTouchAt: string;
   createdAt: string;
 };
 

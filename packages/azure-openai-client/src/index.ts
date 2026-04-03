@@ -59,35 +59,45 @@ export function buildRealtimeSessionConfig(systemPrompt: string) {
     session: {
       type: "session.update",
       session: {
-        voice: env.azureOpenAiRealtimeVoice,
+        type: "realtime",
+        model: env.azureOpenAiRealtimeDeployment,
         instructions: systemPrompt,
-        input_audio_format: env.azureOpenAiRealtimeInputFormat,
-        output_audio_format: env.azureOpenAiRealtimeOutputFormat,
-        input_audio_transcription: {
-          model: env.azureOpenAiRealtimeInputTranscriptionModel,
-          language: env.azureOpenAiRealtimeInputTranscriptionLanguage
-        },
-        input_audio_noise_reduction: {
-          type: env.azureOpenAiRealtimeNoiseReduction
-        },
-        turn_detection:
-          env.azureOpenAiRealtimeTurnDetection === "semantic_vad"
-            ? {
-                type: "semantic_vad",
-                eagerness: env.azureOpenAiRealtimeVadEagerness,
-                create_response: env.azureOpenAiRealtimeCreateResponse,
-                interrupt_response: env.azureOpenAiRealtimeInterruptResponse
-              }
-            : {
-                type: "server_vad",
-                threshold: env.azureOpenAiRealtimeServerVadThreshold,
-                prefix_padding_ms: env.azureOpenAiRealtimeServerVadPrefixPaddingMs,
-                silence_duration_ms: env.azureOpenAiRealtimeServerVadSilenceMs,
-                create_response: env.azureOpenAiRealtimeCreateResponse,
-                interrupt_response: env.azureOpenAiRealtimeInterruptResponse
-              },
-        temperature: env.azureOpenAiRealtimeTemperature,
-        max_response_output_tokens: env.azureOpenAiRealtimeMaxOutputTokens
+        output_modalities: ["audio"],
+        audio: {
+          input: {
+            transcription: {
+              model: env.azureOpenAiRealtimeInputTranscriptionModel,
+              language: env.azureOpenAiRealtimeInputTranscriptionLanguage
+            },
+            format: {
+              type: "audio/pcm",
+              rate: 24000
+            },
+            turn_detection:
+              env.azureOpenAiRealtimeTurnDetection === "semantic_vad"
+                ? {
+                    type: "semantic_vad",
+                    eagerness: env.azureOpenAiRealtimeVadEagerness,
+                    create_response: env.azureOpenAiRealtimeCreateResponse,
+                    interrupt_response: env.azureOpenAiRealtimeInterruptResponse
+                  }
+                : {
+                    type: "server_vad",
+                    threshold: env.azureOpenAiRealtimeServerVadThreshold,
+                    prefix_padding_ms: env.azureOpenAiRealtimeServerVadPrefixPaddingMs,
+                    silence_duration_ms: env.azureOpenAiRealtimeServerVadSilenceMs,
+                    create_response: env.azureOpenAiRealtimeCreateResponse,
+                    interrupt_response: env.azureOpenAiRealtimeInterruptResponse
+                  }
+          },
+          output: {
+            voice: env.azureOpenAiRealtimeVoice,
+            format: {
+              type: "audio/pcm",
+              rate: 24000
+            }
+          }
+        }
       }
     }
   };

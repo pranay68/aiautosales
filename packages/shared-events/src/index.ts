@@ -7,10 +7,13 @@ export type EventName =
   | "strategy.generated"
   | "policy.checked"
   | "call.requested"
+  | "call.bridge.created"
+  | "call.bridge.updated"
   | "call.started"
   | "call.turn.logged"
   | "call.ended"
   | "followup.created"
+  | "sequence.planned"
   | "evaluation.completed";
 
 export type DomainEvent<TPayload = unknown> = {
@@ -37,4 +40,3 @@ export function createEvent<TPayload>(
     correlationId
   };
 }
-

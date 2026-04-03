@@ -12,6 +12,7 @@
   "dependencies": {
     "@aiautosales/config": "0.1.0",
     "@aiautosales/db": "0.1.0",
+    "@aiautosales/bridge-gateway": "0.1.0",
     "@aiautosales/dialer-service": "0.1.0",
     "@aiautosales/live-tool-service": "0.1.0",
     "@aiautosales/orchestrator": "0.1.0",

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Client, Connection } from "@temporalio/client";
 import { loadEnv } from "@aiautosales/config";
 import { db } from "@aiautosales/db";
+import { getBridgeSession, ingestBridgeEvent, listBridgeSessions } from "@aiautosales/bridge-gateway";
 import { getSonetelValidationSummary, handleSonetelWebhook } from "@aiautosales/dialer-service";
 import { createFollowupTask, getCallBrief, lookupProductFact } from "@aiautosales/live-tool-service";
 import { runDirectLeadWorkflow } from "@aiautosales/orchestrator";
@@ -50,8 +51,33 @@ app.get("/providers/bridge/validate", (_request, response) => {
     bridgeGatewayPublicBaseUrlPresent: Boolean(env.bridgeGatewayPublicBaseUrl),
     sonetelAgentDestinationPresent: Boolean(env.sonetelAgentDestination),
     liveOutboundReady: Boolean(env.sonetelAgentDestination && env.sonetelOutgoingCallerId),
-    agentDestinationHint: env.sonetelAgentDestination || "sip:agent@your-sbc.example.com"
+    agentDestinationHint: env.sonetelAgentDestination || "sip:agent@your-sbc.example.com",
+    mediaWebsocketHint: `${env.bridgeGatewayPublicBaseUrl || `http://localhost:${env.bridgeGatewayPort}`}/bridge-sessions/:id/media`
   });
+});
+
+app.get("/bridge-sessions", async (_request, response) => {
+  response.json(await listBridgeSessions());
+});
+
+app.get("/bridge-sessions/:id", async (request, response) => {
+  const session = await getBridgeSession(request.params.id);
+  if (!session) {
+    response.status(404).json({ error: "Bridge session not found" });
+    return;
+  }
+
+  response.json(session);
+});
+
+app.post("/bridge-sessions/:id/events", async (request, response) => {
+  const correlationId = request.header("x-correlation-id") ?? createCorrelationId();
+  try {
+    response.json(await ingestBridgeEvent(request.params.id, request.body, correlationId));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown bridge event error";
+    response.status(400).json({ error: message });
+  }
 });
 
 app.get("/snapshot", (_request, response) => {
@@ -147,6 +173,21 @@ app.get("/calls/:id/transcript", (request, response) => {
   db.listTranscriptTurns(request.params.id).then((turns) => response.json(turns));
 });
 
+app.get("/sequence-plans", (_request, response) => {
+  db.listSequencePlans().then((plans) => response.json(plans));
+});
+
+app.get("/sequence-plans/:id", (request, response) => {
+  db.getSequencePlan(request.params.id).then((plan) => {
+    if (!plan) {
+      response.status(404).json({ error: "Sequence plan not found" });
+      return;
+    }
+
+    response.json(plan);
+  });
+});
+
 app.get("/product-facts/:productId", async (request, response) => {
   response.json(await lookupProductFact(request.params.productId));
 });
@@ -156,7 +197,7 @@ app.post("/followups", async (request, response) => {
     .object({
       prospectId: z.string().min(1),
       callSessionId: z.string().min(1),
-      channel: z.enum(["email", "sms", "callback"]),
+      channel: z.enum(["email", "sms", "callback", "meeting"]),
       summary: z.string().min(1)
     })
     .parse(request.body);

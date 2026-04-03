@@ -1,0 +1,146 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+packages:
+  - curl
+  - gnupg
+  - ca-certificates
+  - lsb-release
+  - build-essential
+  - cmake
+  - git
+  - pkg-config
+  - autoconf
+  - automake
+  - libtool
+  - libssl-dev
+  - libcurl4-openssl-dev
+  - libpcre3-dev
+  - libspeexdsp-dev
+  - libopus-dev
+  - libsndfile1-dev
+  - libsqlite3-dev
+  - libedit-dev
+  - lua5.4
+  - liblua5.4-dev
+  - unzip
+  - jq
+
+write_files:
+  - path: /etc/default/aiautosales-freeswitch
+    permissions: "0644"
+    content: |
+      BRIDGE_GATEWAY_PUBLIC_BASE_URL=__BRIDGE_GATEWAY_PUBLIC_BASE_URL__
+
+  - path: /usr/local/bin/bootstrap-freeswitch.sh
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      export DEBIAN_FRONTEND=noninteractive
+      if [ -f /etc/default/aiautosales-freeswitch ]; then
+        # shellcheck disable=SC1091
+        source /etc/default/aiautosales-freeswitch
+      fi
+
+      apt-get update
+      apt-get install -y gnupg2 wget apt-transport-https
+
+      install -d /usr/share/keyrings
+      if [ ! -f /usr/share/keyrings/freeswitch-archive-keyring.gpg ]; then
+        curl -fsSL https://files.freeswitch.org/repo/ubuntu/freeswitch-1.10/freeswitch_archive_gpg_key.gpg \
+          | gpg --dearmor -o /usr/share/keyrings/freeswitch-archive-keyring.gpg
+      fi
+
+      echo "deb [signed-by=/usr/share/keyrings/freeswitch-archive-keyring.gpg] https://files.freeswitch.org/repo/ubuntu/freeswitch-1.10 jammy main" \
+        > /etc/apt/sources.list.d/freeswitch.list
+
+      apt-get update
+      apt-get install -y freeswitch-meta-all freeswitch-mod-event-socket freeswitch-mod-lua freeswitch-mod-console
+
+      install -d /usr/local/src
+      if [ ! -d /usr/local/src/mod_audio_stream ]; then
+        git clone --depth 1 https://github.com/amigniter/mod_audio_stream.git /usr/local/src/mod_audio_stream
+      fi
+
+      cd /usr/local/src/mod_audio_stream
+      if [ ! -d build ]; then
+        mkdir build
+      fi
+      cd build
+      cmake .. -DFREESWITCH_INCLUDE_DIR=/usr/include/freeswitch
+      cmake --build . -j"$(nproc)"
+
+      module_path="$(find /usr -name mod_audio_stream.so -print -quit || true)"
+      if [ -z "$module_path" ]; then
+        module_path="$(find /usr/local -name mod_audio_stream.so -print -quit || true)"
+      fi
+
+      if [ -n "$module_path" ]; then
+        install -d /usr/lib/freeswitch/mod
+        cp "$module_path" /usr/lib/freeswitch/mod/mod_audio_stream.so
+      fi
+
+      install -d /etc/freeswitch/dialplan/public
+      cat >/etc/freeswitch/dialplan/public/ai-bridge.xml <<'XML'
+      <include>
+        <extension name="ai-bridge">
+          <condition field="destination_number" expression="^agent$">
+            <action application="answer"/>
+            <action application="system" data="/usr/local/share/freeswitch/claim-bridge-session.sh ${uuid}"/>
+            <action application="hangup"/>
+          </condition>
+        </extension>
+      </include>
+XML
+
+      install -d /usr/local/share/freeswitch
+      cat >/usr/local/share/freeswitch/claim-bridge-session.sh <<'SH'
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      uuid="${1:-}"
+      if [ -z "$uuid" ]; then
+        echo "missing uuid" >&2
+        exit 1
+      fi
+
+      if [ -f /etc/default/aiautosales-freeswitch ]; then
+        # shellcheck disable=SC1091
+        source /etc/default/aiautosales-freeswitch
+      fi
+
+      bridge_base="${BRIDGE_GATEWAY_PUBLIC_BASE_URL:-http://127.0.0.1:4040}"
+      response="$(curl -fsS -X POST \
+        -H 'Content-Type: application/json' \
+        -H "X-Correlation-Id: ${uuid}" \
+        -d "{\"callUuid\":\"${uuid}\"}" \
+        "${bridge_base}/bridge-sessions/claim-next")"
+
+      media_ws_url="$(printf '%s' "$response" | jq -r '.mediaWebsocketUrl // empty')"
+      bridge_session_id="$(printf '%s' "$response" | jq -r '.bridgeSession.id // empty')"
+      call_session_id="$(printf '%s' "$response" | jq -r '.bridgeSession.callSessionId // empty')"
+      prospect_id="$(printf '%s' "$response" | jq -r '.bridgeSession.prospectId // empty')"
+
+      if [ -z "$media_ws_url" ] || [ -z "$bridge_session_id" ]; then
+        echo "bridge claim failed: $response" >&2
+        exit 1
+      fi
+
+      meta="$(jq -nc \
+        --arg bridgeSessionId "$bridge_session_id" \
+        --arg callSessionId "$call_session_id" \
+        --arg prospectId "$prospect_id" \
+        '{bridgeSessionId:$bridgeSessionId, callSessionId:$callSessionId, prospectId:$prospectId}')"
+
+      fs_cli -x "uuid_audio_stream ${uuid} start ${media_ws_url} mono 8000 '${meta}'"
+      SH
+      chmod +x /usr/local/share/freeswitch/claim-bridge-session.sh
+
+      systemctl daemon-reload || true
+      systemctl enable freeswitch || true
+      systemctl restart freeswitch || true
+
+runcmd:
+  - [ bash, -lc, "/usr/local/bin/bootstrap-freeswitch.sh > /var/log/bootstrap-freeswitch.log 2>&1" ]

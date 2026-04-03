@@ -126,6 +126,18 @@ Payload:
 - summary
 - dueAt
 
+### `sequence.planned`
+
+Aggregate: `prospect.id`
+
+Payload:
+
+- outcome
+- recommended channel
+- next state
+- summary
+- next touch time
+
 ### `evaluation.completed`
 
 Aggregate: `callSession.id`
@@ -135,4 +147,3 @@ Payload:
 - scorecard
 - talk balance
 - failure markers
-

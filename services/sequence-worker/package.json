@@ -1,5 +1,5 @@
 {
-  "name": "@aiautosales/voice-gateway",
+  "name": "@aiautosales/sequence-worker",
   "version": "0.1.0",
   "type": "module",
   "main": "src/index.ts",
@@ -9,12 +9,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@aiautosales/azure-openai-client": "0.1.0",
     "@aiautosales/db": "0.1.0",
     "@aiautosales/domain-models": "0.1.0",
-    "@aiautosales/prompt-kits": "0.1.0",
-    "@aiautosales/shared-events": "0.1.0",
-    "@aiautosales/telemetry": "0.1.0",
-    "ws": "^8.20.0"
+    "@aiautosales/live-tool-service": "0.1.0",
+    "@aiautosales/shared-events": "0.1.0"
   }
 }

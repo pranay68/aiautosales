@@ -30,12 +30,14 @@ BLOCKED
 - `DIALING -> IN_CALL`
 - `IN_CALL -> CALL_COMPLETED`
 - `CALL_COMPLETED -> FOLLOWUP_GENERATED`
+- `CALL_COMPLETED -> SEQUENCE_SCHEDULED`
 - `FOLLOWUP_GENERATED -> SEQUENCE_SCHEDULED`
 - `SEQUENCE_SCHEDULED -> WON`
 - `SEQUENCE_SCHEDULED -> LOST`
 - `SEQUENCE_SCHEDULED -> NURTURE`
 
+Positive call outcomes should usually land in `SEQUENCE_SCHEDULED` when a meeting is booked, or `FOLLOWUP_GENERATED` when a callback is requested.
+
 ## Enforcement Rule
 
 Only the orchestrator may perform major lead state transitions.
-

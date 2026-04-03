@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { loadEnv } from "@aiautosales/config";
 import type {
+  BridgeSession,
   CallBrief,
   CallSession,
   Company,
@@ -12,6 +13,7 @@ import type {
   PolicyDecision,
   Product,
   Prospect,
+  SequencePlan,
   ResearchPacket,
   TranscriptTurn
 } from "@aiautosales/domain-models";
@@ -26,6 +28,8 @@ type RecordKind =
   | "callBriefs"
   | "policyDecisions"
   | "callSessions"
+  | "bridgeSessions"
+  | "sequencePlans"
   | "transcriptTurns"
   | "followups";
 
@@ -38,6 +42,8 @@ type Store = {
   callBriefs: Map<string, CallBrief>;
   policyDecisions: Map<string, PolicyDecision>;
   callSessions: Map<string, CallSession>;
+  bridgeSessions: Map<string, BridgeSession>;
+  sequencePlans: Map<string, SequencePlan>;
   transcriptTurns: Map<string, TranscriptTurn>;
   followups: Map<string, FollowupTask>;
   events: DomainEvent[];
@@ -52,6 +58,8 @@ const memoryStore: Store = {
   callBriefs: new Map(),
   policyDecisions: new Map(),
   callSessions: new Map(),
+  bridgeSessions: new Map(),
+  sequencePlans: new Map(),
   transcriptTurns: new Map(),
   followups: new Map(),
   events: []
@@ -186,10 +194,25 @@ export const db = {
   updateCallSession: (id: string, updater: (current: CallSession) => CallSession) =>
     updateRecord("callSessions", id, updater),
   listCallSessions: () => listRecords<CallSession>("callSessions"),
+  putBridgeSession: (value: BridgeSession) => putRecord("bridgeSessions", value),
+  getBridgeSession: (id: string) => getRecord<BridgeSession>("bridgeSessions", id),
+  updateBridgeSession: (id: string, updater: (current: BridgeSession) => BridgeSession) =>
+    updateRecord("bridgeSessions", id, updater),
+  listBridgeSessions: () => listRecords<BridgeSession>("bridgeSessions"),
+  getBridgeSessionByCallSessionId: (callSessionId: string) =>
+    findOneBy<BridgeSession>("bridgeSessions", (entry) => entry.callSessionId === callSessionId),
+  putSequencePlan: (value: SequencePlan) => putRecord("sequencePlans", value),
+  getSequencePlan: (id: string) => getRecord<SequencePlan>("sequencePlans", id),
+  listSequencePlans: () => listRecords<SequencePlan>("sequencePlans"),
+  listSequencePlansByProspectId: (prospectId: string) =>
+    filterBy<SequencePlan>("sequencePlans", (entry) => entry.prospectId === prospectId),
+  getSequencePlanByCallSessionId: (callSessionId: string) =>
+    findOneBy<SequencePlan>("sequencePlans", (entry) => entry.callSessionId === callSessionId),
   putTranscriptTurn: (value: TranscriptTurn) => putRecord("transcriptTurns", value),
   listTranscriptTurns: (callSessionId: string) =>
     filterBy<TranscriptTurn>("transcriptTurns", (entry) => entry.callSessionId === callSessionId),
   putFollowup: (value: FollowupTask) => putRecord("followups", value),
+  listFollowups: () => listRecords<FollowupTask>("followups"),
   listFollowupsByProspectId: (prospectId: string) =>
     filterBy<FollowupTask>("followups", (entry) => entry.prospectId === prospectId),
   appendEvent: async (event: DomainEvent) => {
@@ -246,6 +269,9 @@ export const db = {
     products: await db.listProducts(),
     prospects: await db.listProspects(),
     callSessions: await db.listCallSessions(),
+    bridgeSessions: await db.listBridgeSessions(),
+    sequencePlans: await db.listSequencePlans(),
+    followups: await db.listFollowups(),
     events: await db.listEvents()
   })
 };

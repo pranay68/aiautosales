@@ -1,20 +1,20 @@
 import { db } from "@aiautosales/db";
-import { markCallEnded, markCallStarted, queueOutboundCall } from "@aiautosales/dialer-service";
+import { createBridgeSession } from "@aiautosales/bridge-gateway";
+import { queueOutboundCall } from "@aiautosales/dialer-service";
 import type {
   CallBrief,
   CallSession,
   DirectCallRequest,
+  BridgeSession,
   PolicyDecision,
   Prospect,
   ResearchPacket
 } from "@aiautosales/domain-models";
-import { evaluateCall } from "@aiautosales/evaluation-worker";
-import { createFollowupTask } from "@aiautosales/live-tool-service";
 import { generateResearchPacket } from "@aiautosales/research-worker";
 import { createEvent } from "@aiautosales/shared-events";
 import { generateCallBrief } from "@aiautosales/strategy-worker";
+import { loadEnv } from "@aiautosales/config";
 import { createCorrelationId, log } from "@aiautosales/telemetry";
-import { appendTranscriptTurn, startVoiceSession } from "@aiautosales/voice-gateway";
 
 export type DirectWorkflowResult = {
   prospect: Prospect;
@@ -22,7 +22,8 @@ export type DirectWorkflowResult = {
   callBrief: CallBrief;
   policyDecision: PolicyDecision;
   callSession?: CallSession;
-  evaluation?: Awaited<ReturnType<typeof evaluateCall>>;
+  bridgeSession?: BridgeSession;
+  evaluation?: undefined;
 };
 
 export async function runDirectLeadWorkflow(request: DirectCallRequest): Promise<DirectWorkflowResult> {
@@ -100,9 +101,11 @@ export async function runDirectLeadWorkflow(request: DirectCallRequest): Promise
   await db.updateProspect(prospect.id, (current) => ({ ...current, state: nextState, updatedAt: new Date().toISOString() }));
 
   let callSession: CallSession | undefined;
-  let evaluation: Awaited<ReturnType<typeof evaluateCall>> | undefined;
+  let bridgeSession: BridgeSession | undefined;
+  let evaluation: undefined;
 
   if (policyDecision.status === "allowed" && request.autoStart !== false) {
+    const env = loadEnv();
     callSession = await queueOutboundCall({
       prospectId: prospect.id,
       callBrief,
@@ -110,61 +113,38 @@ export async function runDirectLeadWorkflow(request: DirectCallRequest): Promise
     });
 
     await db.updateProspect(prospect.id, (current) => ({ ...current, state: "DIALING", updatedAt: new Date().toISOString() }));
-    const startedSession = await markCallStarted(callSession.id, correlationId);
-    if (!startedSession) {
-      throw new Error("Failed to start call session");
-    }
-
-    const voiceSession = await startVoiceSession({
-      callSessionId: startedSession.id,
+    const bridgeResult = await createBridgeSession({
+      callSessionId: callSession.id,
       prospectId: prospect.id,
-      product,
-      callBrief,
+      agentDestination: env.sonetelAgentDestination,
       correlationId
     });
-
-    await db.updateProspect(prospect.id, (current) => ({ ...current, state: "IN_CALL", updatedAt: new Date().toISOString() }));
-
-    await appendTranscriptTurn({
-      callSessionId: startedSession.id,
-      speaker: "system",
-      text: `Voice session ${voiceSession.voiceSessionId} created.`,
-      correlationId
-    });
-    await appendTranscriptTurn({
-      callSessionId: startedSession.id,
-      speaker: "agent",
-      text: callBrief.openingLines[0] ?? "I wanted to make a quick introduction.",
-      correlationId
-    });
-    await appendTranscriptTurn({
-      callSessionId: startedSession.id,
-      speaker: "prospect",
-      text: "You have thirty seconds. What is this about?",
-      correlationId
-    });
-    await appendTranscriptTurn({
-      callSessionId: startedSession.id,
-      speaker: "agent",
-      text: "Fair enough. We help teams cut manual call prep and improve outbound quality. Is manual research still slowing your reps down today?",
-      correlationId
-    });
-
-    const completedSession = await markCallEnded(startedSession.id, "callback_requested", correlationId);
-    if (completedSession) {
-      callSession = completedSession;
-      await db.updateProspect(prospect.id, (current) => ({ ...current, state: "CALL_COMPLETED", updatedAt: new Date().toISOString() }));
-      const followupTask = await createFollowupTask({
-        prospectId: prospect.id,
-        callSessionId: completedSession.id,
-        channel: "callback",
-        summary: "Prospect asked for a callback after hearing the initial value proposition."
-      });
-      await db.appendEvent(createEvent("followup.created", prospect.id, followupTask, correlationId));
-      await db.updateProspect(prospect.id, (current) => ({ ...current, state: "FOLLOWUP_GENERATED", updatedAt: new Date().toISOString() }));
-      evaluation = await evaluateCall(completedSession.id);
-      await db.appendEvent(createEvent("evaluation.completed", completedSession.id, evaluation, correlationId));
+    const createdBridgeSession = bridgeResult.bridgeSession;
+    if (!createdBridgeSession) {
+      throw new Error("Failed to create bridge session");
     }
+    bridgeSession = createdBridgeSession;
+
+    await db.updateProspect(prospect.id, (current) => ({ ...current, state: "DIALING", updatedAt: new Date().toISOString() }));
+
+    await db.updateCallSession(callSession.id, (current) => ({
+      ...current,
+      providerMetadata: {
+        ...(current.providerMetadata ?? {}),
+        bridgeSessionId: createdBridgeSession.id,
+        bridgeTransport: createdBridgeSession.transport,
+        bridgeStatus: createdBridgeSession.status
+      }
+    }));
+
+    await db.appendEvent(createEvent("call.bridge.updated", createdBridgeSession.id, createdBridgeSession, correlationId));
+
+    /*
+     * The live telephony ingress must now drive call progression.
+     * We intentionally do not fabricate transcript turns or close the call here.
+     */
+
+    evaluation = undefined;
   }
 
   const finalProspect = await db.getProspect(prospect.id);
@@ -184,6 +164,7 @@ export async function runDirectLeadWorkflow(request: DirectCallRequest): Promise
     callBrief,
     policyDecision,
     callSession,
+    bridgeSession,
     evaluation
   };
 }

@@ -369,6 +369,7 @@ Emit events for every major change:
 - `call.objection.detected`
 - `call.ended`
 - `followup.created`
+- `sequence.planned`
 - `deal.updated`
 
 This gives replayability and analytics.
