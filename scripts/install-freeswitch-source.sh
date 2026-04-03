@@ -101,6 +101,9 @@ shim = '''#include "mod_sofia.h"
 #ifndef sip_cloned_parser_destroy
 #define sip_cloned_parser_destroy() ((void)0)
 #endif
+#ifndef nua_handle_unref_user
+#define nua_handle_unref_user nua_handle_unref
+#endif
 '''
 if needle in text and shim not in text:
     text = text.replace(needle, shim, 1)
