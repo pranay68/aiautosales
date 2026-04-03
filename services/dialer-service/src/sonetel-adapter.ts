@@ -110,6 +110,8 @@ async function requestJsonWithCurl(input: {
   const statusMarker = "__SONETEL_HTTP_STATUS__";
   const args = [
     "-sS",
+    "--noproxy",
+    "*",
     "-X",
     input.method,
     ...Object.entries(input.headers).flatMap(([key, value]) => ["-H", `${key}: ${value}`]),
