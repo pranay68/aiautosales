@@ -8,6 +8,7 @@ apt-get install -y \
   git \
   build-essential \
   autoconf \
+  autoconf-archive \
   automake \
   libtool \
   pkg-config \
@@ -71,9 +72,12 @@ fi
 
 cd /usr/src/sofia-sip
 ./autogen.sh
+export CPPFLAGS="-I/usr/local/include ${CPPFLAGS:-}"
+export LDFLAGS="-L/usr/local/lib ${LDFLAGS:-}"
 ./configure --prefix=/usr/local
 make -j"$(nproc)"
 make install
+ldconfig
 
 cd /usr/src/freeswitch
 python3 - <<'PY'
