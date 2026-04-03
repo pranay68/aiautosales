@@ -19,9 +19,21 @@ cat >/usr/local/freeswitch/conf/vars.xml <<EOF
   <X-PRE-PROCESS cmd="set" data="global_codec_prefs=PCMU,PCMA"/>
   <X-PRE-PROCESS cmd="set" data="local_ip_v4=${private_ip}"/>
   <X-PRE-PROCESS cmd="set" data="xml_rpc_password=worksnot"/>
-  <X-PRE-PROCESS cmd="set" data="internal_sip_port=5060"/>
-  <X-PRE-PROCESS cmd="set" data="external_sip_port=5080"/>
+  <X-PRE-PROCESS cmd="set" data="external_sip_port=5060"/>
 </include>
+EOF
+
+cat >/usr/local/freeswitch/conf/autoload_configs/sofia.conf.xml <<'EOF'
+<configuration name="sofia.conf" description="sofia Endpoint">
+  <global_settings>
+    <param name="log-level" value="0"/>
+    <param name="tracelevel" value="DEBUG"/>
+  </global_settings>
+
+  <profiles>
+    <X-PRE-PROCESS cmd="include" data="../sip_profiles/external.xml"/>
+  </profiles>
+</configuration>
 EOF
 
 if ! grep -q 'mod_audio_stream' /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml; then
