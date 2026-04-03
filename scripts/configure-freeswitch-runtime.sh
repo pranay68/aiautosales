@@ -82,7 +82,12 @@ meta="$(jq -nc \
   --arg prospectId "${prospect_id}" \
   '{bridgeSessionId:$bridgeSessionId, callSessionId:$callSessionId, prospectId:$prospectId}')"
 
-/usr/local/freeswitch/bin/fs_cli -x "uuid_audio_stream ${uuid} start ${media_ws_url} mono 8000 '${meta}'"
+fs_cli_output="$(/usr/local/freeswitch/bin/fs_cli -x "uuid_audio_stream ${uuid} start ${media_ws_url} mono 8000 '${meta}'" 2>&1 || true)"
+echo "${fs_cli_output}" >&2
+if [[ "${fs_cli_output}" != *"+OK"* ]]; then
+  echo "uuid_audio_stream failed for ${uuid}" >&2
+  exit 1
+fi
 EOF
 chmod +x /usr/local/freeswitch/scripts/claim-bridge-session.sh
 
