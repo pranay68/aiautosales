@@ -64,6 +64,20 @@ Cflags: -I${includedir}
 PC
 
 cd /usr/src/freeswitch
+cat > modules.conf <<'CONF'
+applications/mod_commands
+applications/mod_dptools
+applications/mod_spandsp
+codecs/mod_opus
+dialplans/mod_dialplan_xml
+endpoints/mod_sofia
+event_handlers/mod_event_socket
+formats/mod_native_file
+formats/mod_sndfile
+languages/mod_lua
+loggers/mod_console
+CONF
+
 ./bootstrap.sh -j
 export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH:-}
 ./configure --prefix=/usr/local/freeswitch
