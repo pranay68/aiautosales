@@ -178,7 +178,9 @@ export async function createSonetelCallRequest(input: SonetelCallRequest) {
     endpoint: auth.callbackEndpoint,
     headers: {
       Authorization: `Bearer ${auth.accessToken}`,
-      "Content-Type": "application/json"
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": "aiautosales/1.0"
     },
     payload: {
       app_id: `aiautosales:${input.prospectId}`,
