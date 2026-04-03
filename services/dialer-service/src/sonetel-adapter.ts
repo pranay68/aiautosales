@@ -166,7 +166,7 @@ export async function createSonetelCallRequest(input: SonetelCallRequest) {
     },
     payload: {
       app_id: `aiautosales:${input.prospectId}`,
-      call1: auth.agentDestination,
+      call1: auth.outgoingCallerId,
       call2: input.to,
       show_1: "automatic",
       show_2: getDisplayNumber(auth.outgoingCallerId)
@@ -211,6 +211,10 @@ export async function syncSonetelAgentForwarding(): Promise<{
 
 function normalizeSonetelSipTarget(destination: string): string {
   if (!destination.startsWith("sip:")) {
+    return destination;
+  }
+
+  if (destination.includes("sip.sonetel.com")) {
     return destination;
   }
 
