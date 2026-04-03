@@ -64,6 +64,27 @@ Cflags: -I${includedir}
 PC
 
 cd /usr/src/freeswitch
+python3 - <<'PY'
+from pathlib import Path
+
+path = Path("/usr/src/freeswitch/src/switch_core_media.c")
+text = path.read_text()
+needle = '#include <sofia-sip/sdp.h>\n'
+shim = '''#include <sofia-sip/sdp.h>
+#ifndef sdp_proto_msrp
+#define sdp_proto_msrp sdp_proto_tcp
+#endif
+#ifndef sdp_proto_msrps
+#define sdp_proto_msrps sdp_proto_tls
+#endif
+#ifndef sdp_media_text
+#define sdp_media_text sdp_media_message
+#endif
+'''
+if needle in text and shim not in text:
+    text = text.replace(needle, shim, 1)
+    path.write_text(text)
+PY
 cat > modules.conf <<'CONF'
 applications/mod_commands
 applications/mod_dptools
