@@ -8,10 +8,13 @@ loadDotenv({ path: resolve(repoRoot, ".env") });
 
 export type AppEnv = {
   appApiPort: number;
+  webPort: number;
   voiceGatewayPort: number;
   orchestratorPort: number;
   liveToolServicePort: number;
   bridgeGatewayPort: number;
+  operatorApiKey: string;
+  allowUnauthenticatedHealth: boolean;
   azureOpenAiEndpoint: string;
   azureOpenAiApiKey: string;
   azureOpenAiRealtimeDeployment: string;
@@ -74,10 +77,13 @@ function getBoolean(name: string, fallback: boolean): boolean {
 export function loadEnv(): AppEnv {
   return {
     appApiPort: getNumber("APP_API_PORT", 4000),
+    webPort: getNumber("WEB_PORT", 3000),
     voiceGatewayPort: getNumber("VOICE_GATEWAY_PORT", 4010),
     orchestratorPort: getNumber("ORCHESTRATOR_PORT", 4020),
     liveToolServicePort: getNumber("LIVE_TOOL_SERVICE_PORT", 4030),
     bridgeGatewayPort: getNumber("BRIDGE_GATEWAY_PORT", 4040),
+    operatorApiKey: getString("OPERATOR_API_KEY"),
+    allowUnauthenticatedHealth: getBoolean("ALLOW_UNAUTHENTICATED_HEALTH", true),
     azureOpenAiEndpoint: getString("AZURE_OPENAI_ENDPOINT"),
     azureOpenAiApiKey: getString("AZURE_OPENAI_API_KEY").replace(/^AZURE_OPENAI_API_KEY=/, ""),
     azureOpenAiRealtimeDeployment: getString("AZURE_OPENAI_REALTIME_DEPLOYMENT", "gpt-realtime"),

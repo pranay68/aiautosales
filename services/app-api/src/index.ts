@@ -12,9 +12,40 @@ import { createCorrelationId, log } from "@aiautosales/telemetry";
 const app = express();
 app.use(express.json());
 
+app.use((request, response, next) => {
+  response.header("Access-Control-Allow-Origin", "*");
+  response.header("Access-Control-Allow-Headers", "content-type, x-correlation-id, x-api-key");
+  response.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+
+  if (request.method === "OPTIONS") {
+    response.sendStatus(204);
+    return;
+  }
+
+  next();
+});
+
 app.use((request, _response, next) => {
   const correlationId = request.header("x-correlation-id") ?? createCorrelationId();
   request.headers["x-correlation-id"] = correlationId;
+  next();
+});
+
+app.use((request, response, next) => {
+  const env = loadEnv();
+  const isHealthRequest = request.path === "/health" && env.allowUnauthenticatedHealth;
+
+  if (isHealthRequest || !env.operatorApiKey) {
+    next();
+    return;
+  }
+
+  const apiKey = request.header("x-api-key");
+  if (apiKey !== env.operatorApiKey) {
+    response.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
   next();
 });
 
@@ -82,6 +113,40 @@ app.post("/bridge-sessions/:id/events", async (request, response) => {
 
 app.get("/snapshot", (_request, response) => {
   db.snapshot().then((snapshot) => response.json(snapshot));
+});
+
+app.get("/dashboard", async (_request, response) => {
+  const [products, prospects, callSessions, bridgeSessions, sequencePlans, followups, events] =
+    await Promise.all([
+      db.listProducts(),
+      db.listProspects(),
+      db.listCallSessions(),
+      db.listBridgeSessions(),
+      db.listSequencePlans(),
+      db.listFollowups(),
+      db.listEvents()
+    ]);
+
+  response.json({
+    counts: {
+      products: products.length,
+      prospects: prospects.length,
+      callSessions: callSessions.length,
+      bridgeSessions: bridgeSessions.length,
+      sequencePlans: sequencePlans.length,
+      followups: followups.length,
+      events: events.length
+    },
+    latest: {
+      product: products.at(-1) ?? null,
+      prospect: prospects.at(-1) ?? null,
+      callSession: callSessions.at(-1) ?? null,
+      bridgeSession: bridgeSessions.at(-1) ?? null,
+      sequencePlan: sequencePlans.at(-1) ?? null,
+      followup: followups.at(-1) ?? null,
+      event: events.at(-1) ?? null
+    }
+  });
 });
 
 app.get("/products", (_request, response) => {

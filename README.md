@@ -23,9 +23,13 @@ Start here if you are new to the repo:
 ```bash
 npm install
 npm run dev:api
+npm run dev:web
 ```
 
 The API starts on `http://localhost:4000`.
+The operator console starts on `http://localhost:3000`.
+
+Set `OPERATOR_API_KEY` in `.env` and use that same value in the web console or as the `x-api-key` header for API calls. `GET /health` can remain unauthenticated when `ALLOW_UNAUTHENTICATED_HEALTH=true`.
 
 Useful validation commands:
 
@@ -48,6 +52,7 @@ Useful provider endpoints:
 - `GET /providers/sonetel/validate`
 - `GET /providers/bridge/validate`
 - `POST /providers/sonetel/webhooks`
+- `GET /dashboard`
 
 FreeSWITCH ingress:
 
