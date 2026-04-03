@@ -151,12 +151,23 @@ async function requestJsonWithCurl(input: {
   }
 
   const shellQuote = (value: string) => `'${value.replace(/'/g, `'\"'\"'`)}'`;
-  const payload = JSON.stringify(input.body);
+  const payload = input.body;
+  const jqPayloadCommand = [
+    "jq -nc",
+    "--arg app_id",
+    shellQuote(String(payload.app_id ?? "")),
+    "--arg call1",
+    shellQuote(String(payload.call1 ?? "")),
+    "--arg call2",
+    shellQuote(String(payload.call2 ?? "")),
+    "--arg show_1",
+    shellQuote(String(payload.show_1 ?? "")),
+    "--arg show_2",
+    shellQuote(String(payload.show_2 ?? "")),
+    "'{app_id:$app_id,call1:$call1,call2:$call2,show_1:$show_1,show_2:$show_2}'"
+  ].join(" ");
   const command = [
-    "payload=$(cat <<'JSON'",
-    payload,
-    "JSON",
-    ");",
+    `payload=$(${jqPayloadCommand});`,
     "curl -sS --noproxy '*'",
     "-X",
     input.method,
