@@ -24,6 +24,7 @@ type SonetelAuthContext = {
   apiBaseUrl: string;
   accessToken: string;
   accountId: string;
+  userId: string;
   outgoingCallerId: string;
   agentDestination: string;
   callbackEndpoint: string;
@@ -136,16 +137,31 @@ export function deriveSonetelAccountId(accessToken: string): string {
   return String(decoded.acc_id);
 }
 
+export function deriveSonetelUserId(accessToken: string): string {
+  const payload = accessToken.split(".")[1];
+  const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
+    user_id?: number | string;
+  };
+
+  if (!decoded.user_id) {
+    throw new Error("Could not derive Sonetel user id from access token.");
+  }
+
+  return String(decoded.user_id);
+}
+
 export async function buildSonetelAuthContext(): Promise<SonetelAuthContext> {
   const env = loadEnv();
   const accessToken = await getSonetelAccessToken();
   const accountId = env.sonetelAccountId || deriveSonetelAccountId(accessToken);
+  const userId = deriveSonetelUserId(accessToken);
 
   return {
     provider: "sonetel" as const,
     apiBaseUrl: env.sonetelApiBaseUrl,
     accessToken,
     accountId,
+    userId,
     outgoingCallerId: env.sonetelOutgoingCallerId,
     agentDestination: env.sonetelAgentDestination,
     callbackEndpoint: getCallbackEndpoint(env.sonetelApiBaseUrl),
@@ -183,10 +199,9 @@ export async function syncSonetelAgentForwarding(): Promise<{
   ensureLiveOutboundReady(auth);
 
   const endpoint = getCallForwardingEndpoint(auth.apiBaseUrl, auth.accountId, auth.outgoingCallerId);
-  const forwardingTarget = normalizeSonetelSipTarget(auth.agentDestination);
   const payload = {
-    connect_to_type: auth.agentDestination.startsWith("sip:") ? "sip" : "phone",
-    connect_to: forwardingTarget
+    connect_to_type: "user",
+    connect_to: auth.userId
   };
 
   const response = await fetch(endpoint, {
@@ -235,9 +250,7 @@ export async function executeSonetelOutboundCall(input: SonetelCallRequest): Pro
   }
 
   ensureLiveOutboundReady(auth);
-  const forwarding = isEmailDestination(auth.agentDestination)
-    ? undefined
-    : await syncSonetelAgentForwarding();
+  const forwarding = await syncSonetelAgentForwarding();
 
   const response = await fetch(request.endpoint, {
     method: "POST",
