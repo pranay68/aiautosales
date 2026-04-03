@@ -93,6 +93,18 @@ shim = '''#include <sofia-sip/sdp.h>
 if needle in text and shim not in text:
     text = text.replace(needle, shim, 1)
     path.write_text(text)
+
+mod_sofia = Path("/usr/src/freeswitch/src/mod/endpoints/mod_sofia/mod_sofia.c")
+text = mod_sofia.read_text()
+needle = '#include "mod_sofia.h"\n'
+shim = '''#include "mod_sofia.h"
+#ifndef sip_cloned_parser_destroy
+#define sip_cloned_parser_destroy() ((void)0)
+#endif
+'''
+if needle in text and shim not in text:
+    text = text.replace(needle, shim, 1)
+    mod_sofia.write_text(text)
 PY
 cat > modules.conf <<'CONF'
 applications/mod_commands
