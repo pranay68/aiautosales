@@ -1,4 +1,8 @@
 import { loadEnv } from "@aiautosales/config";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 type SonetelCallRequest = {
   to: string;
@@ -89,6 +93,57 @@ function ensureLiveOutboundReady(context: SonetelAuthContext): void {
       `Sonetel live outbound is enabled but missing required config: ${missing.join(", ")}`
     );
   }
+}
+
+type CurlJsonResponse = {
+  statusCode: number;
+  bodyText: string;
+  bodyJson: unknown;
+};
+
+async function requestJsonWithCurl(input: {
+  method: "POST" | "PUT";
+  endpoint: string;
+  headers: Record<string, string>;
+  body: Record<string, unknown>;
+}): Promise<CurlJsonResponse> {
+  const statusMarker = "__SONETEL_HTTP_STATUS__";
+  const args = [
+    "-sS",
+    "-X",
+    input.method,
+    ...Object.entries(input.headers).flatMap(([key, value]) => ["-H", `${key}: ${value}`]),
+    "--data-raw",
+    JSON.stringify(input.body),
+    "-w",
+    `\\n${statusMarker}:%{http_code}`,
+    input.endpoint
+  ];
+
+  const { stdout } = await execFileAsync("curl", args, { maxBuffer: 1024 * 1024 });
+  const markerIndex = stdout.lastIndexOf(statusMarker);
+  if (markerIndex < 0) {
+    throw new Error(`Sonetel curl request did not return an HTTP status marker: ${stdout}`);
+  }
+
+  const bodyText = stdout.slice(0, markerIndex).trim();
+  const statusText = stdout.slice(markerIndex + statusMarker.length + 1).trim();
+  const statusCode = Number.parseInt(statusText, 10);
+
+  let bodyJson: unknown = undefined;
+  if (bodyText) {
+    try {
+      bodyJson = JSON.parse(bodyText);
+    } catch {
+      bodyJson = bodyText;
+    }
+  }
+
+  return {
+    statusCode: Number.isNaN(statusCode) ? 0 : statusCode,
+    bodyText,
+    bodyJson
+  };
 }
 
 export async function getSonetelAccessToken(): Promise<string> {
@@ -206,24 +261,24 @@ export async function syncSonetelAgentForwarding(): Promise<{
     connect_to: auth.userId
   };
 
-  const response = await fetch(endpoint, {
+  const response = await requestJsonWithCurl({
     method: "PUT",
+    endpoint,
     headers: {
       Authorization: `Bearer ${auth.accessToken}`,
       "Content-Type": "application/json",
       Accept: "application/json"
     },
-    body: JSON.stringify(payload)
+    body: payload
   });
 
-  const rawResponse = await response.json().catch(() => undefined);
-  if (!response.ok) {
+  if (response.statusCode < 200 || response.statusCode >= 300) {
     throw new Error(
-      `Sonetel call forwarding update failed with status ${response.status}: ${JSON.stringify(rawResponse)}`
+      `Sonetel call forwarding update failed with status ${response.statusCode}: ${JSON.stringify(response.bodyJson ?? response.bodyText)}`
     );
   }
 
-  return { endpoint, payload, rawResponse };
+  return { endpoint, payload, rawResponse: response.bodyJson };
 }
 
 function normalizeSonetelSipTarget(destination: string): string {
@@ -256,20 +311,21 @@ export async function executeSonetelOutboundCall(input: SonetelCallRequest): Pro
     ? undefined
     : await syncSonetelAgentForwarding();
 
-  const response = await fetch(request.endpoint, {
+  const response = await requestJsonWithCurl({
     method: "POST",
+    endpoint: request.endpoint,
     headers: request.headers,
-    body: JSON.stringify(request.payload)
+    body: request.payload
   });
 
-  const rawResponse = await response.json().catch(() => undefined);
-  if (!response.ok) {
+  if (response.statusCode < 200 || response.statusCode >= 300) {
     throw new Error(
-      `Sonetel outbound call failed with status ${response.status}: ${JSON.stringify(rawResponse)}`
+      `Sonetel outbound call failed with status ${response.statusCode}: ${JSON.stringify(response.bodyJson ?? response.bodyText)}`
     );
   }
 
-  const responseRecord = rawResponse && typeof rawResponse === "object" ? (rawResponse as Record<string, unknown>) : {};
+  const responseRecord =
+    response.bodyJson && typeof response.bodyJson === "object" ? (response.bodyJson as Record<string, unknown>) : {};
 
   return {
     live: true,
@@ -282,7 +338,7 @@ export async function executeSonetelOutboundCall(input: SonetelCallRequest): Pro
     ),
     payload: request.payload,
     rawResponse: {
-      callback: rawResponse,
+      callback: response.bodyJson,
       forwarding
     }
   };
