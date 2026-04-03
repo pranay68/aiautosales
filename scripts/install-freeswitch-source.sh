@@ -15,7 +15,7 @@ apt-get install -y \
   libssl-dev \
   zlib1g-dev \
   libevent-dev \
-  libspandsp3-dev \
+  libspandsp-dev \
   libspeexdsp-dev \
   libldns-dev \
   liblua5.4-dev \
