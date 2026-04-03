@@ -21,6 +21,7 @@ type SonetelExecutionResult = {
 
 type SonetelAuthContext = {
   provider: "sonetel";
+  apiBaseUrl: string;
   accessToken: string;
   accountId: string;
   outgoingCallerId: string;
@@ -37,6 +38,11 @@ function getCallbackEndpoint(baseUrl: string): string {
   return `${normalizeBaseUrl(baseUrl)}/make-calls/call/call-back`;
 }
 
+function getCallForwardingEndpoint(baseUrl: string, accountId: string, phoneNumber: string): string {
+  const normalizedNumber = phoneNumber.replace(/^\+/, "");
+  return `${normalizeBaseUrl(baseUrl)}/account/${accountId}/phonenumbersubscription/${normalizedNumber}`;
+}
+
 function getDisplayNumber(outgoingCallerId: string): string {
   return outgoingCallerId || "automatic";
 }
@@ -51,10 +57,15 @@ function isValidAgentDestinationFormat(destination: string): boolean {
   }
 
   return (
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destination) ||
     /^sip:[^\s]+$/i.test(destination) ||
     /^tel:\+?[0-9][0-9()-\s.]{4,}$/.test(destination) ||
     /^\+?[0-9][0-9()-\s.]{6,}$/.test(destination)
   );
+}
+
+function isEmailDestination(destination: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destination);
 }
 
 function ensureLiveOutboundReady(context: SonetelAuthContext): void {
@@ -132,6 +143,7 @@ export async function buildSonetelAuthContext(): Promise<SonetelAuthContext> {
 
   return {
     provider: "sonetel" as const,
+    apiBaseUrl: env.sonetelApiBaseUrl,
     accessToken,
     accountId,
     outgoingCallerId: env.sonetelOutgoingCallerId,
@@ -154,12 +166,55 @@ export async function createSonetelCallRequest(input: SonetelCallRequest) {
     },
     payload: {
       app_id: `aiautosales:${input.prospectId}`,
-      call1: auth.agentDestination || "missing-agent-destination",
+      call1: auth.agentDestination,
       call2: input.to,
       show_1: "automatic",
       show_2: getDisplayNumber(auth.outgoingCallerId)
     }
   };
+}
+
+export async function syncSonetelAgentForwarding(): Promise<{
+  endpoint: string;
+  payload: Record<string, unknown>;
+  rawResponse: unknown;
+}> {
+  const auth = await buildSonetelAuthContext();
+  ensureLiveOutboundReady(auth);
+
+  const endpoint = getCallForwardingEndpoint(auth.apiBaseUrl, auth.accountId, auth.outgoingCallerId);
+  const forwardingTarget = normalizeSonetelSipTarget(auth.agentDestination);
+  const payload = {
+    connect_to_type: auth.agentDestination.startsWith("sip:") ? "sip" : "phone",
+    connect_to: forwardingTarget
+  };
+
+  const response = await fetch(endpoint, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${auth.accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const rawResponse = await response.json().catch(() => undefined);
+  if (!response.ok) {
+    throw new Error(
+      `Sonetel call forwarding update failed with status ${response.status}: ${JSON.stringify(rawResponse)}`
+    );
+  }
+
+  return { endpoint, payload, rawResponse };
+}
+
+function normalizeSonetelSipTarget(destination: string): string {
+  if (!destination.startsWith("sip:")) {
+    return destination;
+  }
+
+  return destination.includes(":5060") ? destination : `${destination}:5060`;
 }
 
 export async function executeSonetelOutboundCall(input: SonetelCallRequest): Promise<SonetelExecutionResult> {
@@ -176,6 +231,9 @@ export async function executeSonetelOutboundCall(input: SonetelCallRequest): Pro
   }
 
   ensureLiveOutboundReady(auth);
+  const forwarding = isEmailDestination(auth.agentDestination)
+    ? undefined
+    : await syncSonetelAgentForwarding();
 
   const response = await fetch(request.endpoint, {
     method: "POST",
@@ -202,7 +260,10 @@ export async function executeSonetelOutboundCall(input: SonetelCallRequest): Pro
       responseRecord.status ?? responseRecord.callStatus ?? "submitted"
     ),
     payload: request.payload,
-    rawResponse
+    rawResponse: {
+      callback: rawResponse,
+      forwarding
+    }
   };
 }
 

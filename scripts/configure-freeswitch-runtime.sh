@@ -12,6 +12,16 @@ if [[ -z "${private_ip}" ]]; then
   exit 1
 fi
 
+if [[ -f /opt/aiautosales/.env ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source /opt/aiautosales/.env
+  set +a
+fi
+
+sonetel_username="${SONETEL_EMAIL%%@*}"
+sonetel_domain="${SONETEL_EMAIL#*@}"
+
 install -d /usr/local/freeswitch/conf /usr/local/freeswitch/var/run/freeswitch /usr/local/freeswitch/log /usr/local/freeswitch/db
 
 cat >/usr/local/freeswitch/conf/vars.xml <<EOF
@@ -90,6 +100,25 @@ if [[ "${fs_cli_output}" != *"+OK"* ]]; then
 fi
 EOF
 chmod +x /usr/local/freeswitch/scripts/claim-bridge-session.sh
+
+if [[ -n "${SONETEL_EMAIL:-}" && -n "${SONETEL_PASSWORD:-}" ]]; then
+  install -d /usr/local/freeswitch/conf/sip_profiles/external
+  cat >/usr/local/freeswitch/conf/sip_profiles/external/sonetel.xml <<EOF
+<include>
+  <gateway name="sonetel">
+    <param name="username" value="${sonetel_username}"/>
+    <param name="password" value="${SONETEL_PASSWORD}"/>
+    <param name="realm" value="${sonetel_domain}"/>
+    <param name="from-user" value="${sonetel_username}"/>
+    <param name="from-domain" value="${sonetel_domain}"/>
+    <param name="proxy" value="sip.sonetel.com"/>
+    <param name="register-proxy" value="sip.sonetel.com"/>
+    <param name="register" value="true"/>
+    <param name="expire-seconds" value="300"/>
+  </gateway>
+</include>
+EOF
+fi
 
 if ! grep -q 'mod_audio_stream' /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml; then
   sed -i '/<\/modules>/i \    <load module="mod_audio_stream"/>' /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml
