@@ -77,8 +77,17 @@ shim = '''#include <sofia-sip/sdp.h>
 #ifndef sdp_proto_msrps
 #define sdp_proto_msrps sdp_proto_tls
 #endif
+#ifndef sdp_proto_extended_srtp
+#define sdp_proto_extended_srtp sdp_proto_srtp
+#endif
+#ifndef sdp_proto_extended_rtp
+#define sdp_proto_extended_rtp sdp_proto_rtp
+#endif
 #ifndef sdp_media_text
 #define sdp_media_text sdp_media_message
+#endif
+#ifndef sdp_bw_tias
+#define sdp_bw_tias sdp_bw_as
 #endif
 '''
 if needle in text and shim not in text:
