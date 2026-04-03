@@ -250,7 +250,9 @@ export async function executeSonetelOutboundCall(input: SonetelCallRequest): Pro
   }
 
   ensureLiveOutboundReady(auth);
-  const forwarding = await syncSonetelAgentForwarding();
+  const forwarding = isEmailDestination(auth.agentDestination)
+    ? undefined
+    : await syncSonetelAgentForwarding();
 
   const response = await fetch(request.endpoint, {
     method: "POST",
