@@ -33,6 +33,7 @@ sed -i "s/auto-nat/host:${public_host}/g" /usr/local/freeswitch/conf/sip_profile
 sed -i "s/auto-nat/host:${public_host}/g" /usr/local/freeswitch/conf/sip_profiles/external.xml
 
 pkill -f '^/usr/local/freeswitch/bin/freeswitch' || true
+rm -f /usr/local/freeswitch/var/run/freeswitch/freeswitch.pid
 sleep 2
 
 nohup /usr/local/freeswitch/bin/freeswitch \
