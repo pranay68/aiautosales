@@ -107,22 +107,45 @@ async function requestJsonWithCurl(input: {
   headers: Record<string, string>;
   body: Record<string, unknown>;
 }): Promise<CurlJsonResponse> {
+  if (process.platform === "win32") {
+    const response = await fetch(input.endpoint, {
+      method: input.method,
+      headers: input.headers,
+      body: JSON.stringify(input.body)
+    });
+
+    const bodyText = await response.text();
+    let bodyJson: unknown = undefined;
+    if (bodyText) {
+      try {
+        bodyJson = JSON.parse(bodyText);
+      } catch {
+        bodyJson = bodyText;
+      }
+    }
+
+    return {
+      statusCode: response.status,
+      bodyText,
+      bodyJson
+    };
+  }
+
   const statusMarker = "__SONETEL_HTTP_STATUS__";
-  const args = [
-    "-sS",
-    "--noproxy",
-    "*",
+  const shellQuote = (value: string) => `'${value.replace(/'/g, `'\"'\"'`)}'`;
+  const command = [
+    "curl -sS --noproxy '*'",
     "-X",
     input.method,
-    ...Object.entries(input.headers).flatMap(([key, value]) => ["-H", `${key}: ${value}`]),
+    ...Object.entries(input.headers).flatMap(([key, value]) => ["-H", shellQuote(`${key}: ${value}`)]),
     "--data-raw",
-    JSON.stringify(input.body),
+    shellQuote(JSON.stringify(input.body)),
     "-w",
-    `\\n${statusMarker}:%{http_code}`,
-    input.endpoint
-  ];
+    shellQuote(`\\n${statusMarker}:%{http_code}`),
+    shellQuote(input.endpoint)
+  ].join(" ");
 
-  const { stdout } = await execFileAsync("curl", args, { maxBuffer: 1024 * 1024 });
+  const { stdout } = await execFileAsync("bash", ["-lc", command], { maxBuffer: 1024 * 1024 });
   const markerIndex = stdout.lastIndexOf(statusMarker);
   if (markerIndex < 0) {
     throw new Error(`Sonetel curl request did not return an HTTP status marker: ${stdout}`);
