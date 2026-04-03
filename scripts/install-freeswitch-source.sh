@@ -16,6 +16,7 @@ apt-get install -y \
   zlib1g-dev \
   libevent-dev \
   libspandsp-dev \
+  libsofia-sip-ua-dev \
   libspeexdsp-dev \
   libldns-dev \
   liblua5.4-dev \
@@ -49,9 +50,22 @@ Libs.private: -ltiff -lm
 Cflags: -I${includedir}
 PC
 
+cat >/usr/local/lib/pkgconfig/sofia-sip-ua.pc <<'PC'
+prefix=/usr
+exec_prefix=${prefix}
+libdir=${prefix}/lib/x86_64-linux-gnu
+includedir=${prefix}/include
+
+Name: sofia-sip-ua
+Description: Sofia-SIP library development files
+Version: 1.13.17
+Libs: -L${libdir} -lsofia-sip-ua
+Cflags: -I${includedir}
+PC
+
 cd /usr/src/freeswitch
 ./bootstrap.sh -j
-export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH:-}
+export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:${PKG_CONFIG_PATH:-}
 ./configure --prefix=/usr/local/freeswitch
 make -j"$(nproc)"
 make install
