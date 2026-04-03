@@ -37,7 +37,7 @@ cat >/usr/local/freeswitch/conf/autoload_configs/sofia.conf.xml <<'EOF'
 EOF
 
 install -d /usr/local/freeswitch/conf/dialplan/public
-cat >/usr/local/freeswitch/conf/dialplan/public/ai-bridge.xml <<'EOF'
+cat >/usr/local/freeswitch/conf/dialplan/public/00_ai_bridge.xml <<'EOF'
 <include>
   <extension name="ai-bridge">
     <condition field="destination_number" expression="^.*$">
