@@ -50,7 +50,8 @@ Libs.private: -ltiff -lm
 Cflags: -I${includedir}
 PC
 
-cat >/usr/local/lib/pkgconfig/sofia-sip-ua.pc <<'PC'
+if [[ ! -f /usr/local/lib/pkgconfig/sofia-sip-ua.pc ]]; then
+  cat >/usr/local/lib/pkgconfig/sofia-sip-ua.pc <<'PC'
 prefix=/usr
 exec_prefix=${prefix}
 libdir=${prefix}/lib/x86_64-linux-gnu
@@ -62,6 +63,17 @@ Version: 1.13.17
 Libs: -L${libdir} -lsofia-sip-ua
 Cflags: -I${includedir}
 PC
+fi
+
+if [[ ! -d /usr/src/sofia-sip/.git ]]; then
+  git clone --branch v1.13.17 --depth 1 https://github.com/freeswitch/sofia-sip.git /usr/src/sofia-sip
+fi
+
+cd /usr/src/sofia-sip
+./autogen.sh
+./configure --prefix=/usr/local
+make -j"$(nproc)"
+make install
 
 cd /usr/src/freeswitch
 python3 - <<'PY'
