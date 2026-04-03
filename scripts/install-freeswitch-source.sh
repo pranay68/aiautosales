@@ -34,8 +34,24 @@ if [[ ! -d /usr/src/freeswitch/.git ]]; then
   git clone --branch v1.10.12 --depth 1 https://github.com/signalwire/freeswitch.git /usr/src/freeswitch
 fi
 
+mkdir -p /usr/local/lib/pkgconfig
+cat >/usr/local/lib/pkgconfig/spandsp.pc <<'PC'
+prefix=/usr
+exec_prefix=${prefix}
+libdir=${prefix}/lib/x86_64-linux-gnu
+includedir=${prefix}/include
+
+Name: spandsp
+Description: A DSP library for telephony.
+Version: 3.0
+Libs: -L${libdir} -lspandsp
+Libs.private: -ltiff -lm
+Cflags: -I${includedir}
+PC
+
 cd /usr/src/freeswitch
 ./bootstrap.sh -j
+export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH:-}
 ./configure --prefix=/usr/local/freeswitch
 make -j"$(nproc)"
 make install
