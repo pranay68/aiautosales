@@ -36,6 +36,19 @@ cat >/usr/local/freeswitch/conf/autoload_configs/sofia.conf.xml <<'EOF'
 </configuration>
 EOF
 
+install -d /usr/local/freeswitch/conf/dialplan/public
+cat >/usr/local/freeswitch/conf/dialplan/public/ai-bridge.xml <<'EOF'
+<include>
+  <extension name="ai-bridge">
+    <condition field="destination_number" expression="^agent$">
+      <action application="answer"/>
+      <action application="system" data="/usr/local/freeswitch/scripts/claim-bridge-session.sh ${uuid}"/>
+      <action application="park"/>
+    </condition>
+  </extension>
+</include>
+EOF
+
 if ! grep -q 'mod_audio_stream' /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml; then
   sed -i '/<\/modules>/i \    <load module="mod_audio_stream"/>' /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml
 fi
