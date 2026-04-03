@@ -166,7 +166,7 @@ export async function createSonetelCallRequest(input: SonetelCallRequest) {
     },
     payload: {
       app_id: `aiautosales:${input.prospectId}`,
-      call1: auth.outgoingCallerId,
+      call1: auth.agentDestination,
       call2: input.to,
       show_1: "automatic",
       show_2: getDisplayNumber(auth.outgoingCallerId)
