@@ -1,9 +1,4 @@
 import { loadEnv } from "@aiautosales/config";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-
-const execFileAsync = promisify(execFile);
-
 type SonetelCallRequest = {
   to: string;
   prospectId: string;
@@ -30,6 +25,7 @@ type SonetelAuthContext = {
   accountId: string;
   userId: string;
   outgoingCallerId: string;
+  call1Destination: string;
   agentDestination: string;
   callbackEndpoint: string;
   liveOutboundEnabled: boolean;
@@ -76,16 +72,16 @@ function isEmailDestination(destination: string): boolean {
 function ensureLiveOutboundReady(context: SonetelAuthContext): void {
   const missing: string[] = [];
 
-  if (!context.agentDestination) {
-    missing.push("SONETEL_AGENT_DESTINATION");
+  if (!context.call1Destination) {
+    missing.push("SONETEL_CALL1_DESTINATION");
   }
 
   if (!context.outgoingCallerId) {
     missing.push("SONETEL_OUTGOING_CALLER_ID");
   }
 
-  if (!isValidAgentDestinationFormat(context.agentDestination)) {
-    missing.push("SONETEL_AGENT_DESTINATION");
+  if (!isValidAgentDestinationFormat(context.call1Destination)) {
+    missing.push("SONETEL_CALL1_DESTINATION_FORMAT");
   }
 
   if (missing.length > 0) {
@@ -95,99 +91,25 @@ function ensureLiveOutboundReady(context: SonetelAuthContext): void {
   }
 }
 
-type CurlJsonResponse = {
+type JsonResponse = {
   statusCode: number;
   bodyText: string;
   bodyJson: unknown;
 };
 
-async function requestJsonWithCurl(input: {
+async function requestJson(input: {
   method: "POST" | "PUT";
   endpoint: string;
   headers: Record<string, string>;
   body: Record<string, unknown>;
-}): Promise<CurlJsonResponse> {
-  const statusMarker = "__SONETEL_HTTP_STATUS__";
+}): Promise<JsonResponse> {
+  const response = await fetch(input.endpoint, {
+    method: input.method,
+    headers: input.headers,
+    body: JSON.stringify(input.body)
+  });
 
-  if (process.platform === "win32") {
-    const args = [
-      "-sS",
-      "--noproxy",
-      "*",
-      "-X",
-      input.method,
-      ...Object.entries(input.headers).flatMap(([key, value]) => ["-H", `${key}: ${value}`]),
-      "--data-raw",
-      JSON.stringify(input.body),
-      "-w",
-      `\\n${statusMarker}:%{http_code}`,
-      input.endpoint
-    ];
-
-    const { stdout } = await execFileAsync("curl", args, { maxBuffer: 1024 * 1024 });
-    const markerIndex = stdout.lastIndexOf(statusMarker);
-    if (markerIndex < 0) {
-      throw new Error(`Sonetel curl request did not return an HTTP status marker: ${stdout}`);
-    }
-
-    const bodyText = stdout.slice(0, markerIndex).trim();
-    const statusText = stdout.slice(markerIndex + statusMarker.length + 1).trim();
-    const statusCode = Number.parseInt(statusText, 10);
-
-    let bodyJson: unknown = undefined;
-    if (bodyText) {
-      try {
-        bodyJson = JSON.parse(bodyText);
-      } catch {
-        bodyJson = bodyText;
-      }
-    }
-
-    return {
-      statusCode: Number.isNaN(statusCode) ? 0 : statusCode,
-      bodyText,
-      bodyJson
-    };
-  }
-
-  const shellQuote = (value: string) => `'${value.replace(/'/g, `'\"'\"'`)}'`;
-  const payload = input.body;
-  const jqPayloadCommand = [
-    "jq -nc",
-    "--arg app_id",
-    shellQuote(String(payload.app_id ?? "")),
-    "--arg call1",
-    shellQuote(String(payload.call1 ?? "")),
-    "--arg call2",
-    shellQuote(String(payload.call2 ?? "")),
-    "--arg show_1",
-    shellQuote(String(payload.show_1 ?? "")),
-    "--arg show_2",
-    shellQuote(String(payload.show_2 ?? "")),
-    "'{app_id:$app_id,call1:$call1,call2:$call2,show_1:$show_1,show_2:$show_2}'"
-  ].join(" ");
-  const command = [
-    `payload=$(${jqPayloadCommand});`,
-    "curl -sS --noproxy '*'",
-    "-X",
-    input.method,
-    ...Object.entries(input.headers).flatMap(([key, value]) => ["-H", shellQuote(`${key}: ${value}`)]),
-    "--data-raw",
-    "\"$payload\"",
-    "-w",
-    shellQuote(`\\n${statusMarker}:%{http_code}`),
-    shellQuote(input.endpoint)
-  ].join(" ");
-
-  const { stdout } = await execFileAsync("bash", ["-lc", command], { maxBuffer: 1024 * 1024 });
-  const markerIndex = stdout.lastIndexOf(statusMarker);
-  if (markerIndex < 0) {
-    throw new Error(`Sonetel curl request did not return an HTTP status marker: ${stdout}`);
-  }
-
-  const bodyText = stdout.slice(0, markerIndex).trim();
-  const statusText = stdout.slice(markerIndex + statusMarker.length + 1).trim();
-  const statusCode = Number.parseInt(statusText, 10);
+  const bodyText = await response.text();
 
   let bodyJson: unknown = undefined;
   if (bodyText) {
@@ -199,7 +121,7 @@ async function requestJsonWithCurl(input: {
   }
 
   return {
-    statusCode: Number.isNaN(statusCode) ? 0 : statusCode,
+    statusCode: response.status,
     bodyText,
     bodyJson
   };
@@ -277,6 +199,7 @@ export async function buildSonetelAuthContext(): Promise<SonetelAuthContext> {
     accountId,
     userId,
     outgoingCallerId: env.sonetelOutgoingCallerId,
+    call1Destination: env.sonetelCall1Destination,
     agentDestination: env.sonetelAgentDestination,
     callbackEndpoint: getCallbackEndpoint(env.sonetelApiBaseUrl),
     liveOutboundEnabled: env.sonetelEnableLiveOutbound
@@ -298,7 +221,7 @@ export async function createSonetelCallRequest(input: SonetelCallRequest) {
     },
     payload: {
       app_id: `aiautosales:${input.prospectId}`,
-      call1: auth.agentDestination,
+      call1: auth.call1Destination,
       call2: input.to,
       show_1: "automatic",
       show_2: getDisplayNumber(auth.outgoingCallerId)
@@ -320,7 +243,7 @@ export async function syncSonetelAgentForwarding(): Promise<{
     connect_to: auth.userId
   };
 
-  const response = await requestJsonWithCurl({
+  const response = await requestJson({
     method: "PUT",
     endpoint,
     headers: {
@@ -370,7 +293,7 @@ export async function executeSonetelOutboundCall(input: SonetelCallRequest): Pro
     ? undefined
     : await syncSonetelAgentForwarding();
 
-  const response = await requestJsonWithCurl({
+  const response = await requestJson({
     method: "POST",
     endpoint: request.endpoint,
     headers: request.headers,
@@ -419,12 +342,12 @@ export function normalizeSonetelWebhookEvent(input: unknown) {
 export async function validateSonetelConfiguration() {
   const auth = await buildSonetelAuthContext();
   const missingLiveOutboundConfig: string[] = [];
-  const agentDestinationValid = isValidAgentDestinationFormat(auth.agentDestination);
+  const call1DestinationValid = isValidAgentDestinationFormat(auth.call1Destination);
 
-  if (!auth.agentDestination) {
-    missingLiveOutboundConfig.push("SONETEL_AGENT_DESTINATION");
-  } else if (!agentDestinationValid) {
-    missingLiveOutboundConfig.push("SONETEL_AGENT_DESTINATION_FORMAT");
+  if (!auth.call1Destination) {
+    missingLiveOutboundConfig.push("SONETEL_CALL1_DESTINATION");
+  } else if (!call1DestinationValid) {
+    missingLiveOutboundConfig.push("SONETEL_CALL1_DESTINATION_FORMAT");
   }
 
   if (!auth.outgoingCallerId) {
@@ -435,8 +358,10 @@ export async function validateSonetelConfiguration() {
     provider: auth.provider,
     accountId: auth.accountId,
     outgoingCallerIdPresent: Boolean(auth.outgoingCallerId),
+    call1DestinationPresent: Boolean(auth.call1Destination),
+    call1DestinationValid,
     agentDestinationPresent: Boolean(auth.agentDestination),
-    agentDestinationValid,
+    agentDestinationValid: isValidAgentDestinationFormat(auth.agentDestination),
     liveOutboundEnabled: auth.liveOutboundEnabled,
     liveOutboundReady: missingLiveOutboundConfig.length === 0,
     missingLiveOutboundConfig,

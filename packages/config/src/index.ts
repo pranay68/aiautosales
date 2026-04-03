@@ -37,6 +37,7 @@ export type AppEnv = {
   sonetelAccessToken: string;
   sonetelAccountId: string;
   sonetelOutgoingCallerId: string;
+  sonetelCall1Destination: string;
   sonetelAgentDestination: string;
   sonetelEnableLiveOutbound: boolean;
   bridgeGatewayPublicBaseUrl: string;
@@ -105,6 +106,7 @@ export function loadEnv(): AppEnv {
     sonetelAccessToken: getString("SONETEL_ACCESS_TOKEN"),
     sonetelAccountId: getString("SONETEL_ACCOUNT_ID"),
     sonetelOutgoingCallerId: getString("SONETEL_OUTGOING_CALLER_ID"),
+    sonetelCall1Destination: getString("SONETEL_CALL1_DESTINATION", getString("SONETEL_AGENT_DESTINATION")),
     sonetelAgentDestination: getString("SONETEL_AGENT_DESTINATION"),
     sonetelEnableLiveOutbound: getBoolean("SONETEL_ENABLE_LIVE_OUTBOUND", false),
     bridgeGatewayPublicBaseUrl: getString("BRIDGE_GATEWAY_PUBLIC_BASE_URL"),

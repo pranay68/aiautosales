@@ -2,14 +2,14 @@
 
 Sonetel outbound calling uses a callback-style flow with two destinations:
 
-- `call1`: the AI-side leg
+- `call1`: the AI-side leg, configured by `SONETEL_CALL1_DESTINATION`
 - `call2`: the prospect-side leg
 
-The missing blocker in this repo is `call1`.
+`SONETEL_AGENT_DESTINATION` is the bridge ingress target used by the runtime to validate and route the AI-side telephony path. In the current production setup, both values should point at the same callable SIP ingress unless you are deliberately using a different test leg.
 
-## What `SONETEL_AGENT_DESTINATION` Must Be
+## What The Destinations Must Be
 
-`SONETEL_AGENT_DESTINATION` should point to a real telephony ingress that can accept the first leg of the call and forward audio into the AI runtime. In practice this means:
+`SONETEL_CALL1_DESTINATION` and `SONETEL_AGENT_DESTINATION` should point to a real telephony ingress that can accept the first leg of the call and forward audio into the AI runtime. In practice this means:
 
 - a SIP URI on a PBX/SBC you control
 - or another telephony endpoint that terminates into the bridge gateway
