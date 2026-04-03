@@ -54,7 +54,7 @@ cat >/usr/local/lib/pkgconfig/sofia-sip-ua.pc <<'PC'
 prefix=/usr
 exec_prefix=${prefix}
 libdir=${prefix}/lib/x86_64-linux-gnu
-includedir=${prefix}/include
+includedir=${prefix}/include/sofia-sip-1.12
 
 Name: sofia-sip-ua
 Description: Sofia-SIP library development files
