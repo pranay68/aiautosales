@@ -140,6 +140,13 @@ export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgcon
 make -j"$(nproc)"
 make install
 
+rm -rf /usr/local/freeswitch/conf/*
+cp -R /usr/src/freeswitch/conf/minimal/. /usr/local/freeswitch/conf/
+mkdir -p /usr/local/freeswitch/conf/autoload_configs
+if [[ -f /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml ]]; then
+  sed -i '/<\/modules>/i \    <load module="mod_audio_stream"/>' /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml
+fi
+
 if [[ ! -d /usr/src/mod_audio_stream/.git ]]; then
   git clone https://github.com/amigniter/mod_audio_stream.git /usr/src/mod_audio_stream
 fi
@@ -155,7 +162,7 @@ make -j"$(nproc)"
 make install
 
 install -d /usr/local/freeswitch/conf/dialplan/public
-if ! grep -q 'mod_audio_stream' /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml; then
+if [[ -f /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml ]] && ! grep -q 'mod_audio_stream' /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml; then
   sed -i '/<\/modules>/i \    <load module="mod_audio_stream"/>' /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml
 fi
 
