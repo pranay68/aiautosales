@@ -45,6 +45,7 @@ export async function generateResearchPacket(input: ResearchInput): Promise<Rese
 
   const packet: ResearchPacket = {
     id: crypto.randomUUID(),
+    workspaceId: input.product.workspaceId,
     prospectId: input.prospectId,
     companySummary: `${providerCall.text} The company likely values faster revenue workflows and cleaner outbound execution.`,
     personaSummary: input.contactTitle

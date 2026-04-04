@@ -39,6 +39,7 @@ export async function generateCallBrief(input: StrategyInput): Promise<CallBrief
 
   const brief: CallBrief = {
     id: crypto.randomUUID(),
+    workspaceId: input.product.workspaceId,
     prospectId: input.prospectId,
     productId: input.product.id,
     summary: `${input.researchPacket.companySummary} ${input.researchPacket.personaSummary}`,

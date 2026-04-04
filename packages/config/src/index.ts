@@ -15,6 +15,7 @@ export type AppEnv = {
   bridgeGatewayPort: number;
   operatorApiKey: string;
   allowUnauthenticatedHealth: boolean;
+  defaultWorkspaceId: string;
   azureOpenAiEndpoint: string;
   azureOpenAiApiKey: string;
   azureOpenAiRealtimeDeployment: string;
@@ -84,6 +85,7 @@ export function loadEnv(): AppEnv {
     bridgeGatewayPort: getNumber("BRIDGE_GATEWAY_PORT", 4040),
     operatorApiKey: getString("OPERATOR_API_KEY"),
     allowUnauthenticatedHealth: getBoolean("ALLOW_UNAUTHENTICATED_HEALTH", true),
+    defaultWorkspaceId: getString("DEFAULT_WORKSPACE_ID", "default"),
     azureOpenAiEndpoint: getString("AZURE_OPENAI_ENDPOINT"),
     azureOpenAiApiKey: getString("AZURE_OPENAI_API_KEY").replace(/^AZURE_OPENAI_API_KEY=/, ""),
     azureOpenAiRealtimeDeployment: getString("AZURE_OPENAI_REALTIME_DEPLOYMENT", "gpt-realtime"),

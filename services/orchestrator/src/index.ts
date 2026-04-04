@@ -29,14 +29,16 @@ export type DirectWorkflowResult = {
 export async function runDirectLeadWorkflow(request: DirectCallRequest): Promise<DirectWorkflowResult> {
   const correlationId = createCorrelationId();
   await db.init();
+  const workspaceId = request.workspaceId ?? "default";
   const product = await db.getProduct(request.productId);
-  if (!product) {
+  if (!product || product.workspaceId !== workspaceId) {
     throw new Error(`Unknown product ${request.productId}`);
   }
 
   const now = new Date().toISOString();
   const company = await db.putCompany({
     id: crypto.randomUUID(),
+    workspaceId,
     name: request.companyName,
     website: request.companyWebsite,
     phoneNumber: request.phoneNumber,
@@ -45,6 +47,7 @@ export async function runDirectLeadWorkflow(request: DirectCallRequest): Promise
 
   const contact = await db.putContact({
     id: crypto.randomUUID(),
+    workspaceId,
     companyId: company.id,
     name: request.contactName,
     title: request.contactTitle,
@@ -54,6 +57,7 @@ export async function runDirectLeadWorkflow(request: DirectCallRequest): Promise
 
   const prospect = await db.putProspect({
     id: crypto.randomUUID(),
+    workspaceId,
     productId: product.id,
     companyId: company.id,
     contactId: contact.id,
@@ -185,6 +189,7 @@ function runPolicyGate(prospectId: string, callBrief: CallBrief, request: Direct
 
   return {
     id: crypto.randomUUID(),
+    workspaceId: request.workspaceId ?? "default",
     prospectId,
     status,
     reasons,

@@ -20,6 +20,7 @@
     "validate:azure-realtime": "tsx scripts/validate-azure-realtime.ts",
     "validate:bridge-config": "tsx scripts/validate-bridge-config.ts",
     "validate:sonetel-config": "tsx scripts/validate-sonetel-config.ts",
+    "smoke:workspace-isolation": "node scripts/smoke-workspace-isolation.mjs",
     "refresh:sonetel-token": "tsx scripts/refresh-sonetel-token.ts",
     "test:sonetel-outbound": "tsx scripts/test-sonetel-outbound.ts"
   },

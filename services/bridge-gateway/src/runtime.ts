@@ -86,6 +86,7 @@ export async function createBridgeSession(input: {
   const transport = input.transport ?? (liveEligible ? "sip" : "simulation");
   const bridgeSession: BridgeSession = {
     id: `bridge_${crypto.randomUUID()}`,
+    workspaceId: prospect.workspaceId,
     callSessionId: input.callSessionId,
     prospectId: input.prospectId,
     status: "created",
@@ -152,6 +153,7 @@ async function createSyntheticBridgeSession() {
 
   const product = await db.putProduct({
     id: `product_${crypto.randomUUID()}`,
+    workspaceId: "default",
     name: "AI Sales Demo",
     description: "Synthetic ingress demo product for FreeSWITCH bridge validation.",
     offerSummary: "A live AI calling assistant that handles cold outreach and books meetings.",
@@ -161,6 +163,7 @@ async function createSyntheticBridgeSession() {
 
   const company = await db.putCompany({
     id: `company_${crypto.randomUUID()}`,
+    workspaceId: "default",
     name: "Demo Prospect Inc.",
     website: "https://example.com",
     phoneNumber: "+15550001111",
@@ -170,6 +173,7 @@ async function createSyntheticBridgeSession() {
 
   const contact = await db.putContact({
     id: `contact_${crypto.randomUUID()}`,
+    workspaceId: "default",
     companyId: company.id,
     name: "Demo Contact",
     title: "Operations Lead",
@@ -179,6 +183,7 @@ async function createSyntheticBridgeSession() {
 
   const prospect = await db.putProspect({
     id: `prospect_${crypto.randomUUID()}`,
+    workspaceId: "default",
     productId: product.id,
     companyId: company.id,
     contactId: contact.id,
@@ -190,6 +195,7 @@ async function createSyntheticBridgeSession() {
 
   await db.putResearchPacket({
     id: `research_${crypto.randomUUID()}`,
+    workspaceId: "default",
     prospectId: prospect.id,
     companySummary: "Synthetic demo company for live bridge validation.",
     personaSummary: "Synthetic operations lead used for telephony ingress smoke tests.",
@@ -203,6 +209,7 @@ async function createSyntheticBridgeSession() {
 
   const callBrief = await db.putCallBrief({
     id: `brief_${crypto.randomUUID()}`,
+    workspaceId: "default",
     prospectId: prospect.id,
     productId: product.id,
     summary: "Synthetic demo brief for FreeSWITCH bridge validation.",
@@ -236,6 +243,7 @@ async function createSyntheticBridgeSession() {
 
   await db.putPolicyDecision({
     id: `policy_${crypto.randomUUID()}`,
+    workspaceId: "default",
     prospectId: prospect.id,
     status: "allowed",
     reasons: ["synthetic demo session created on demand"],
@@ -244,6 +252,7 @@ async function createSyntheticBridgeSession() {
 
   const callSession = await db.putCallSession({
     id: `call_${crypto.randomUUID()}`,
+    workspaceId: "default",
     prospectId: prospect.id,
     callBriefId: callBrief.id,
     telephonyProvider: "sonetel",

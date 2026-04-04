@@ -25,6 +25,11 @@ export async function planNextSequence(input: {
   followupSummary?: string;
   correlationId: string;
 }): Promise<SequencePlanResult> {
+  const prospect = await db.getProspect(input.prospectId);
+  if (!prospect) {
+    throw new Error(`Unknown prospect ${input.prospectId}`);
+  }
+
   const now = new Date();
   const current = now.toISOString();
   const channel = deriveChannel(input.outcome);
@@ -35,6 +40,7 @@ export async function planNextSequence(input: {
 
   const plan: SequencePlan = {
     id: crypto.randomUUID(),
+    workspaceId: prospect.workspaceId,
     prospectId: input.prospectId,
     callSessionId: input.callSessionId,
     outcome: input.outcome,

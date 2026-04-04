@@ -12,6 +12,14 @@ import { createCorrelationId, log } from "@aiautosales/telemetry";
 const app = express();
 app.use(express.json());
 
+type WorkspaceRequest = express.Request & {
+  workspaceId?: string;
+};
+
+function getRouteParam(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
+
 app.use((request, response, next) => {
   response.header("Access-Control-Allow-Origin", "*");
   response.header("Access-Control-Allow-Headers", "content-type, x-correlation-id, x-api-key");
@@ -28,6 +36,12 @@ app.use((request, response, next) => {
 app.use((request, _response, next) => {
   const correlationId = request.header("x-correlation-id") ?? createCorrelationId();
   request.headers["x-correlation-id"] = correlationId;
+  next();
+});
+
+app.use((request: WorkspaceRequest, _response, next) => {
+  const env = loadEnv();
+  request.workspaceId = request.header("x-workspace-id") ?? env.defaultWorkspaceId;
   next();
 });
 
@@ -87,13 +101,17 @@ app.get("/providers/bridge/validate", (_request, response) => {
   });
 });
 
-app.get("/bridge-sessions", async (_request, response) => {
-  response.json(await listBridgeSessions());
+app.get("/bridge-sessions", async (request: WorkspaceRequest, response) => {
+  const workspaceId = request.workspaceId ?? loadEnv().defaultWorkspaceId;
+  const sessions = await listBridgeSessions();
+  response.json(sessions.filter((entry) => entry.workspaceId === workspaceId));
 });
 
-app.get("/bridge-sessions/:id", async (request, response) => {
-  const session = await getBridgeSession(request.params.id);
-  if (!session) {
+app.get("/bridge-sessions/:id", async (request: WorkspaceRequest, response) => {
+  const workspaceId = request.workspaceId ?? loadEnv().defaultWorkspaceId;
+  const bridgeSessionId = getRouteParam(request.params.id);
+  const session = await getBridgeSession(bridgeSessionId);
+  if (!session || session.workspaceId !== workspaceId) {
     response.status(404).json({ error: "Bridge session not found" });
     return;
   }
@@ -101,30 +119,40 @@ app.get("/bridge-sessions/:id", async (request, response) => {
   response.json(session);
 });
 
-app.post("/bridge-sessions/:id/events", async (request, response) => {
+app.post("/bridge-sessions/:id/events", async (request: WorkspaceRequest, response) => {
   const correlationId = request.header("x-correlation-id") ?? createCorrelationId();
+  const workspaceId = request.workspaceId ?? loadEnv().defaultWorkspaceId;
+  const bridgeSessionId = getRouteParam(request.params.id);
+  const session = await getBridgeSession(bridgeSessionId);
+  if (!session || session.workspaceId !== workspaceId) {
+    response.status(404).json({ error: "Bridge session not found" });
+    return;
+  }
+
   try {
-    response.json(await ingestBridgeEvent(request.params.id, request.body, correlationId));
+    response.json(await ingestBridgeEvent(bridgeSessionId, request.body, correlationId));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown bridge event error";
     response.status(400).json({ error: message });
   }
 });
 
-app.get("/snapshot", (_request, response) => {
-  db.snapshot().then((snapshot) => response.json(snapshot));
+app.get("/snapshot", (request: WorkspaceRequest, response) => {
+  const workspaceId = request.workspaceId ?? loadEnv().defaultWorkspaceId;
+  db.snapshot(workspaceId).then((snapshot) => response.json(snapshot));
 });
 
-app.get("/dashboard", async (_request, response) => {
+app.get("/dashboard", async (request: WorkspaceRequest, response) => {
+  const workspaceId = request.workspaceId ?? loadEnv().defaultWorkspaceId;
   const [products, prospects, callSessions, bridgeSessions, sequencePlans, followups, events] =
     await Promise.all([
-      db.listProducts(),
-      db.listProspects(),
-      db.listCallSessions(),
-      db.listBridgeSessions(),
-      db.listSequencePlans(),
-      db.listFollowups(),
-      db.listEvents()
+      db.listProductsByWorkspace(workspaceId),
+      db.listProspectsByWorkspace(workspaceId),
+      db.listCallSessionsByWorkspace(workspaceId),
+      db.listBridgeSessionsByWorkspace(workspaceId),
+      db.listSequencePlansByWorkspace(workspaceId),
+      db.listFollowupsByWorkspace(workspaceId),
+      db.listEventsByWorkspace(workspaceId)
     ]);
 
   response.json({
@@ -149,14 +177,17 @@ app.get("/dashboard", async (_request, response) => {
   });
 });
 
-app.get("/products", (_request, response) => {
-  db.listProducts().then((products) => response.json(products));
+app.get("/products", (request: WorkspaceRequest, response) => {
+  const workspaceId = request.workspaceId ?? loadEnv().defaultWorkspaceId;
+  db.listProductsByWorkspace(workspaceId).then((products) => response.json(products));
 });
 
-app.post("/products", async (request, response) => {
+app.post("/products", async (request: WorkspaceRequest, response) => {
   const input = createProductSchema.parse(request.body);
+  const workspaceId = request.workspaceId ?? loadEnv().defaultWorkspaceId;
   const product = await db.putProduct({
     id: crypto.randomUUID(),
+    workspaceId,
     ...input,
     createdAt: new Date().toISOString()
   });
@@ -165,14 +196,16 @@ app.post("/products", async (request, response) => {
   response.status(201).json(product);
 });
 
-app.post("/direct-calls", async (request, response) => {
-  const input = directCallSchema.parse(request.body);
+app.post("/direct-calls", async (request: WorkspaceRequest, response) => {
+  const workspaceId = request.workspaceId ?? loadEnv().defaultWorkspaceId;
+  const input = directCallSchema.parse({ ...request.body, workspaceId });
   const result = await runDirectLeadWorkflow(input);
   response.status(201).json(result);
 });
 
-app.post("/direct-calls/temporal", async (request, response) => {
-  const input = directCallSchema.parse(request.body);
+app.post("/direct-calls/temporal", async (request: WorkspaceRequest, response) => {
+  const workspaceId = request.workspaceId ?? loadEnv().defaultWorkspaceId;
+  const input = directCallSchema.parse({ ...request.body, workspaceId });
   const env = loadEnv();
   const connection = await Connection.connect({
     address: env.temporalAddress
@@ -194,8 +227,14 @@ app.post("/direct-calls/temporal", async (request, response) => {
   });
 });
 
-app.get("/prospects/:id", (request, response) => {
-  db.getProspect(request.params.id).then(async (prospect) => {
+app.get("/prospects/:id", (request: WorkspaceRequest, response) => {
+  const workspaceId = request.workspaceId ?? loadEnv().defaultWorkspaceId;
+  db.getProspect(getRouteParam(request.params.id)).then(async (prospect) => {
+    if (prospect && prospect.workspaceId !== workspaceId) {
+      response.status(404).json({ error: "Prospect not found" });
+      return;
+    }
+
     if (!prospect) {
       response.status(404).json({ error: "Prospect not found" });
       return;
@@ -211,9 +250,10 @@ app.get("/prospects/:id", (request, response) => {
   });
 });
 
-app.get("/call-briefs/:id", async (request, response) => {
-  const brief = await getCallBrief(request.params.id);
-  if (!brief) {
+app.get("/call-briefs/:id", async (request: WorkspaceRequest, response) => {
+  const workspaceId = request.workspaceId ?? loadEnv().defaultWorkspaceId;
+  const brief = await getCallBrief(getRouteParam(request.params.id));
+  if (!brief || brief.workspaceId !== workspaceId) {
     response.status(404).json({ error: "Call brief not found" });
     return;
   }
@@ -221,9 +261,10 @@ app.get("/call-briefs/:id", async (request, response) => {
   response.json(brief);
 });
 
-app.get("/calls/:id", async (request, response) => {
-  const session = await db.getCallSession(request.params.id);
-  if (!session) {
+app.get("/calls/:id", async (request: WorkspaceRequest, response) => {
+  const workspaceId = request.workspaceId ?? loadEnv().defaultWorkspaceId;
+  const session = await db.getCallSession(getRouteParam(request.params.id));
+  if (!session || session.workspaceId !== workspaceId) {
     response.status(404).json({ error: "Call session not found" });
     return;
   }
@@ -234,17 +275,27 @@ app.get("/calls/:id", async (request, response) => {
   });
 });
 
-app.get("/calls/:id/transcript", (request, response) => {
-  db.listTranscriptTurns(request.params.id).then((turns) => response.json(turns));
+app.get("/calls/:id/transcript", async (request: WorkspaceRequest, response) => {
+  const workspaceId = request.workspaceId ?? loadEnv().defaultWorkspaceId;
+  const callSessionId = getRouteParam(request.params.id);
+  const session = await db.getCallSession(callSessionId);
+  if (!session || session.workspaceId !== workspaceId) {
+    response.status(404).json({ error: "Call session not found" });
+    return;
+  }
+
+  response.json(await db.listTranscriptTurns(callSessionId));
 });
 
-app.get("/sequence-plans", (_request, response) => {
-  db.listSequencePlans().then((plans) => response.json(plans));
+app.get("/sequence-plans", (request: WorkspaceRequest, response) => {
+  const workspaceId = request.workspaceId ?? loadEnv().defaultWorkspaceId;
+  db.listSequencePlansByWorkspace(workspaceId).then((plans) => response.json(plans));
 });
 
-app.get("/sequence-plans/:id", (request, response) => {
-  db.getSequencePlan(request.params.id).then((plan) => {
-    if (!plan) {
+app.get("/sequence-plans/:id", (request: WorkspaceRequest, response) => {
+  const workspaceId = request.workspaceId ?? loadEnv().defaultWorkspaceId;
+  db.getSequencePlan(getRouteParam(request.params.id)).then((plan) => {
+    if (!plan || plan.workspaceId !== workspaceId) {
       response.status(404).json({ error: "Sequence plan not found" });
       return;
     }
@@ -253,11 +304,20 @@ app.get("/sequence-plans/:id", (request, response) => {
   });
 });
 
-app.get("/product-facts/:productId", async (request, response) => {
-  response.json(await lookupProductFact(request.params.productId));
+app.get("/product-facts/:productId", async (request: WorkspaceRequest, response) => {
+  const workspaceId = request.workspaceId ?? loadEnv().defaultWorkspaceId;
+  const productId = getRouteParam(request.params.productId);
+  const product = await db.getProduct(productId);
+  if (!product || product.workspaceId !== workspaceId) {
+    response.status(404).json({ error: "Product not found" });
+    return;
+  }
+
+  response.json(await lookupProductFact(productId));
 });
 
-app.post("/followups", async (request, response) => {
+app.post("/followups", async (request: WorkspaceRequest, response) => {
+  const workspaceId = request.workspaceId ?? loadEnv().defaultWorkspaceId;
   const body = z
     .object({
       prospectId: z.string().min(1),
@@ -266,6 +326,12 @@ app.post("/followups", async (request, response) => {
       summary: z.string().min(1)
     })
     .parse(request.body);
+
+  const prospect = await db.getProspect(body.prospectId);
+  if (!prospect || prospect.workspaceId !== workspaceId) {
+    response.status(404).json({ error: "Prospect not found" });
+    return;
+  }
 
   const followup = await createFollowupTask(body);
   response.status(201).json(followup);

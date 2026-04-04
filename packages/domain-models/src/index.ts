@@ -18,6 +18,7 @@ export type LeadState =
 
 export type Product = {
   id: EntityId;
+  workspaceId: EntityId;
   name: string;
   description: string;
   offerSummary: string;
@@ -27,6 +28,7 @@ export type Product = {
 
 export type Company = {
   id: EntityId;
+  workspaceId: EntityId;
   name: string;
   website?: string;
   phoneNumber?: string;
@@ -36,6 +38,7 @@ export type Company = {
 
 export type Contact = {
   id: EntityId;
+  workspaceId: EntityId;
   companyId: EntityId;
   name?: string;
   title?: string;
@@ -45,6 +48,7 @@ export type Contact = {
 
 export type Prospect = {
   id: EntityId;
+  workspaceId: EntityId;
   productId: EntityId;
   companyId: EntityId;
   contactId: EntityId;
@@ -56,6 +60,7 @@ export type Prospect = {
 
 export type ResearchPacket = {
   id: EntityId;
+  workspaceId: EntityId;
   prospectId: EntityId;
   companySummary: string;
   personaSummary: string;
@@ -76,6 +81,7 @@ export type ObjectionNode = {
 
 export type CallBrief = {
   id: EntityId;
+  workspaceId: EntityId;
   prospectId: EntityId;
   productId: EntityId;
   summary: string;
@@ -95,6 +101,7 @@ export type CallBrief = {
 
 export type PolicyDecision = {
   id: EntityId;
+  workspaceId: EntityId;
   prospectId: EntityId;
   status: "allowed" | "blocked" | "review_required";
   reasons: string[];
@@ -103,6 +110,7 @@ export type PolicyDecision = {
 
 export type CallSession = {
   id: EntityId;
+  workspaceId: EntityId;
   prospectId: EntityId;
   callBriefId: EntityId;
   telephonyProvider: "sonetel";
@@ -121,6 +129,7 @@ export type CallSession = {
 
 export type BridgeSession = {
   id: EntityId;
+  workspaceId: EntityId;
   callSessionId: EntityId;
   prospectId: EntityId;
   status: "created" | "connecting" | "connected" | "streaming" | "completed" | "failed" | "closed";
@@ -134,6 +143,7 @@ export type BridgeSession = {
 
 export type FollowupTask = {
   id: EntityId;
+  workspaceId: EntityId;
   prospectId: EntityId;
   callSessionId: EntityId;
   channel: "email" | "sms" | "callback" | "meeting";
@@ -145,6 +155,7 @@ export type FollowupTask = {
 
 export type SequencePlan = {
   id: EntityId;
+  workspaceId: EntityId;
   prospectId: EntityId;
   callSessionId: EntityId;
   outcome: string;
@@ -157,6 +168,7 @@ export type SequencePlan = {
 
 export type TranscriptTurn = {
   id: EntityId;
+  workspaceId: EntityId;
   callSessionId: EntityId;
   speaker: "agent" | "prospect" | "system";
   text: string;
@@ -164,6 +176,7 @@ export type TranscriptTurn = {
 };
 
 export type DirectCallRequest = {
+  workspaceId?: EntityId;
   productId: EntityId;
   companyName: string;
   companyWebsite?: string;

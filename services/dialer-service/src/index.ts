@@ -31,6 +31,7 @@ export async function queueOutboundCall(input: DialCallInput): Promise<CallSessi
 
   const session: CallSession = {
     id: crypto.randomUUID(),
+    workspaceId: prospect.workspaceId,
     prospectId: input.prospectId,
     callBriefId: input.callBrief.id,
     telephonyProvider: "sonetel",

@@ -68,6 +68,15 @@ const memoryStore: Store = {
 let pool: Pool | undefined;
 let initialized = false;
 
+function hasWorkspaceId(value: unknown): value is { workspaceId: string } {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "workspaceId" in value &&
+      typeof (value as { workspaceId?: unknown }).workspaceId === "string"
+  );
+}
+
 function getMap<T extends { id: string }>(kind: RecordKind): Map<string, T> {
   return memoryStore[kind] as unknown as Map<string, T>;
 }
@@ -166,12 +175,19 @@ async function filterBy<T>(kind: RecordKind, predicate: (value: T) => boolean): 
   return all.filter(predicate);
 }
 
+async function filterByWorkspace<T>(kind: RecordKind, workspaceId: string): Promise<T[]> {
+  const all = await listRecords<T>(kind);
+  return all.filter((entry) => hasWorkspaceId(entry) && entry.workspaceId === workspaceId);
+}
+
 export const db = {
   init: ensureInitialized,
   putProduct: (value: Product) => putRecord("products", value),
   getProduct: (id: string) => getRecord<Product>("products", id),
   listProducts: () => listRecords<Product>("products"),
+  listProductsByWorkspace: (workspaceId: string) => filterByWorkspace<Product>("products", workspaceId),
   putCompany: (value: Company) => putRecord("companies", value),
+  getCompany: (id: string) => getRecord<Company>("companies", id),
   putContact: (value: Contact) => putRecord("contacts", value),
   getContact: (id: string) => getRecord<Contact>("contacts", id),
   putProspect: (value: Prospect) => putRecord("prospects", value),
@@ -179,6 +195,7 @@ export const db = {
   updateProspect: (id: string, updater: (current: Prospect) => Prospect) =>
     updateRecord("prospects", id, updater),
   listProspects: () => listRecords<Prospect>("prospects"),
+  listProspectsByWorkspace: (workspaceId: string) => filterByWorkspace<Prospect>("prospects", workspaceId),
   putResearchPacket: (value: ResearchPacket) => putRecord("researchPackets", value),
   getResearchPacketByProspectId: (prospectId: string) =>
     findOneBy<ResearchPacket>("researchPackets", (entry) => entry.prospectId === prospectId),
@@ -194,16 +211,19 @@ export const db = {
   updateCallSession: (id: string, updater: (current: CallSession) => CallSession) =>
     updateRecord("callSessions", id, updater),
   listCallSessions: () => listRecords<CallSession>("callSessions"),
+  listCallSessionsByWorkspace: (workspaceId: string) => filterByWorkspace<CallSession>("callSessions", workspaceId),
   putBridgeSession: (value: BridgeSession) => putRecord("bridgeSessions", value),
   getBridgeSession: (id: string) => getRecord<BridgeSession>("bridgeSessions", id),
   updateBridgeSession: (id: string, updater: (current: BridgeSession) => BridgeSession) =>
     updateRecord("bridgeSessions", id, updater),
   listBridgeSessions: () => listRecords<BridgeSession>("bridgeSessions"),
+  listBridgeSessionsByWorkspace: (workspaceId: string) => filterByWorkspace<BridgeSession>("bridgeSessions", workspaceId),
   getBridgeSessionByCallSessionId: (callSessionId: string) =>
     findOneBy<BridgeSession>("bridgeSessions", (entry) => entry.callSessionId === callSessionId),
   putSequencePlan: (value: SequencePlan) => putRecord("sequencePlans", value),
   getSequencePlan: (id: string) => getRecord<SequencePlan>("sequencePlans", id),
   listSequencePlans: () => listRecords<SequencePlan>("sequencePlans"),
+  listSequencePlansByWorkspace: (workspaceId: string) => filterByWorkspace<SequencePlan>("sequencePlans", workspaceId),
   listSequencePlansByProspectId: (prospectId: string) =>
     filterBy<SequencePlan>("sequencePlans", (entry) => entry.prospectId === prospectId),
   getSequencePlanByCallSessionId: (callSessionId: string) =>
@@ -213,6 +233,7 @@ export const db = {
     filterBy<TranscriptTurn>("transcriptTurns", (entry) => entry.callSessionId === callSessionId),
   putFollowup: (value: FollowupTask) => putRecord("followups", value),
   listFollowups: () => listRecords<FollowupTask>("followups"),
+  listFollowupsByWorkspace: (workspaceId: string) => filterByWorkspace<FollowupTask>("followups", workspaceId),
   listFollowupsByProspectId: (prospectId: string) =>
     filterBy<FollowupTask>("followups", (entry) => entry.prospectId === prospectId),
   appendEvent: async (event: DomainEvent) => {
@@ -265,13 +286,17 @@ export const db = {
       correlationId: row.correlation_id
     }));
   },
-  snapshot: async () => ({
-    products: await db.listProducts(),
-    prospects: await db.listProspects(),
-    callSessions: await db.listCallSessions(),
-    bridgeSessions: await db.listBridgeSessions(),
-    sequencePlans: await db.listSequencePlans(),
-    followups: await db.listFollowups(),
-    events: await db.listEvents()
+  listEventsByWorkspace: async (workspaceId: string) => {
+    const events = await db.listEvents();
+    return events.filter((event) => hasWorkspaceId(event.payload) && event.payload.workspaceId === workspaceId);
+  },
+  snapshot: async (workspaceId?: string) => ({
+    products: workspaceId ? await db.listProductsByWorkspace(workspaceId) : await db.listProducts(),
+    prospects: workspaceId ? await db.listProspectsByWorkspace(workspaceId) : await db.listProspects(),
+    callSessions: workspaceId ? await db.listCallSessionsByWorkspace(workspaceId) : await db.listCallSessions(),
+    bridgeSessions: workspaceId ? await db.listBridgeSessionsByWorkspace(workspaceId) : await db.listBridgeSessions(),
+    sequencePlans: workspaceId ? await db.listSequencePlansByWorkspace(workspaceId) : await db.listSequencePlans(),
+    followups: workspaceId ? await db.listFollowupsByWorkspace(workspaceId) : await db.listFollowups(),
+    events: workspaceId ? await db.listEventsByWorkspace(workspaceId) : await db.listEvents()
   })
 };

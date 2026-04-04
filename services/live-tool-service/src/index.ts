@@ -20,8 +20,14 @@ export async function createFollowupTask(input: {
   channel: FollowupTask["channel"];
   summary: string;
 }): Promise<FollowupTask> {
+  const prospect = await db.getProspect(input.prospectId);
+  if (!prospect) {
+    throw new Error(`Unknown prospect ${input.prospectId}`);
+  }
+
   const task: FollowupTask = {
     id: crypto.randomUUID(),
+    workspaceId: prospect.workspaceId,
     prospectId: input.prospectId,
     callSessionId: input.callSessionId,
     channel: input.channel,

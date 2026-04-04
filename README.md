@@ -29,7 +29,7 @@ npm run dev:web
 The API starts on `http://localhost:4000`.
 The operator console starts on `http://localhost:3000`.
 
-Set `OPERATOR_API_KEY` in `.env` and use that same value in the web console or as the `x-api-key` header for API calls. `GET /health` can remain unauthenticated when `ALLOW_UNAUTHENTICATED_HEALTH=true`.
+Set `OPERATOR_API_KEY` in `.env` and use that same value in the web console or as the `x-api-key` header for API calls. Set `DEFAULT_WORKSPACE_ID` for the default tenant boundary, or override it per request with `x-workspace-id`. `GET /health` can remain unauthenticated when `ALLOW_UNAUTHENTICATED_HEALTH=true`.
 
 Useful validation commands:
 

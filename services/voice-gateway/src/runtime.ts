@@ -515,6 +515,7 @@ export async function appendTranscriptTurn(input: {
 
   const turn: TranscriptTurn = {
     id: crypto.randomUUID(),
+    workspaceId: session.workspaceId,
     callSessionId: input.callSessionId,
     speaker: input.speaker,
     text: input.text,
