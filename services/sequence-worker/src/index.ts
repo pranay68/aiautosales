@@ -59,18 +59,14 @@ export async function planNextSequence(input: {
     updatedAt: current
   }));
 
-  if (channel === "meeting" || channel === "callback") {
-    const followup = await createFollowupTask({
-      prospectId: input.prospectId,
-      callSessionId: input.callSessionId,
-      channel,
-      summary
-    });
-    await db.appendEvent(createEvent("followup.created", input.prospectId, followup, input.correlationId));
-    return { plan, followup };
-  }
-
-  return { plan };
+  const followup = await createFollowupTask({
+    prospectId: input.prospectId,
+    callSessionId: input.callSessionId,
+    channel,
+    summary
+  });
+  await db.appendEvent(createEvent("followup.created", input.prospectId, followup, input.correlationId));
+  return { plan, followup };
 }
 
 export function determineSequenceChannel(outcome: SequenceOutcome): FollowupTask["channel"] {
@@ -120,6 +116,14 @@ function deriveSummary(outcome: SequenceOutcome, channel: FollowupTask["channel"
 
   if (outcome === "no_answer") {
     return "No answer. Retry once during a more favorable time window, then fall back to email.";
+  }
+
+  if (channel === "sms") {
+    return "Send a short text follow-up that references the call attempt and offers an easy reply path.";
+  }
+
+  if (channel === "email") {
+    return "Send a concise follow-up email that restates relevance, gives one proof point, and offers a short meeting.";
   }
 
   if (outcome === "blocked" || outcome === "not_interested") {
