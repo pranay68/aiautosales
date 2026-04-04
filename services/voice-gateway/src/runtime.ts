@@ -213,6 +213,43 @@ export async function requestVoiceResponse(voiceSessionId: string, correlationId
   );
 }
 
+export async function injectProspectText(input: {
+  voiceSessionId: string;
+  text: string;
+  correlationId: string;
+}) {
+  const session = await ensureActiveSession(input.voiceSessionId, input.correlationId);
+  const normalizedText = input.text.trim();
+  if (!normalizedText) {
+    return;
+  }
+
+  session.socket?.send(
+    JSON.stringify({
+      type: "conversation.item.create",
+      item: {
+        type: "message",
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: normalizedText
+          }
+        ]
+      }
+    })
+  );
+
+  await appendTranscriptTurn({
+    callSessionId: session.callSessionId,
+    speaker: "prospect",
+    text: normalizedText,
+    correlationId: input.correlationId
+  });
+
+  await requestVoiceResponse(input.voiceSessionId, input.correlationId);
+}
+
 export async function appendAudioChunk(input: {
   voiceSessionId: string;
   audio: string;

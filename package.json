@@ -22,6 +22,7 @@
     "validate:bridge-config": "tsx scripts/validate-bridge-config.ts",
     "validate:sonetel-config": "tsx scripts/validate-sonetel-config.ts",
     "verify:live-vm-call": "node scripts/verify-live-vm-call.mjs",
+    "rehearse:local-call": "tsx scripts/rehearse-local-call.ts",
     "smoke:auth-idempotency": "node scripts/smoke-auth-idempotency.mjs",
     "smoke:bridge-realtime": "tsx scripts/smoke-bridge-realtime.ts",
     "smoke:workspace-isolation": "node scripts/smoke-workspace-isolation.mjs",

@@ -5,6 +5,7 @@ export {
   clearAudioBuffer,
   closeVoiceSession,
   getVoiceSession,
+  injectProspectText,
   listVoiceSessions,
   commitAudioBuffer,
   requestVoiceResponse,

@@ -9,6 +9,7 @@ import { createEvent } from "@aiautosales/shared-events";
 import {
   activateVoiceSession,
   appendAudioChunk,
+  injectProspectText,
   appendTranscriptTurn,
   clearAudioBuffer,
   commitAudioBuffer,
@@ -27,7 +28,8 @@ export type BridgeEventInput = {
     | "audio.append"
     | "audio.commit"
     | "audio.clear"
-    | "response.create";
+    | "response.create"
+    | "prospect.message";
   speaker?: "agent" | "prospect" | "system";
   text?: string;
   audio?: string;
@@ -228,6 +230,14 @@ export async function ingestBridgeEvent(
 
   if (payload.event === "response.create" && updatedBridgeSession.voiceSessionId) {
     await requestVoiceResponse(updatedBridgeSession.voiceSessionId, correlationId);
+  }
+
+  if (payload.event === "prospect.message" && payload.text && updatedBridgeSession.voiceSessionId) {
+    await injectProspectText({
+      voiceSessionId: updatedBridgeSession.voiceSessionId,
+      text: payload.text,
+      correlationId
+    });
   }
 
   if (payload.event === "session.completed") {

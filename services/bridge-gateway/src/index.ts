@@ -353,7 +353,8 @@ function parseWebsocketPayload(raw: string): {
     | "audio.append"
     | "audio.commit"
     | "audio.clear"
-    | "response.create";
+    | "response.create"
+    | "prospect.message";
   speaker?: "agent" | "prospect" | "system";
   text?: string;
   audio?: string;
@@ -374,7 +375,8 @@ function parseWebsocketPayload(raw: string): {
       event !== "audio.append" &&
       event !== "audio.commit" &&
       event !== "audio.clear" &&
-      event !== "response.create"
+      event !== "response.create" &&
+      event !== "prospect.message"
     ) {
       return undefined;
     }
