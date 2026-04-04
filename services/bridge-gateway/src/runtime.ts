@@ -134,144 +134,31 @@ export async function createBridgeSession(input: {
 export async function claimNextBridgeSession() {
   const sessions = await db.listBridgeSessions();
   const nextSession = sessions
-    .filter((session) => session.status === "created" || session.status === "connecting")
+    .filter(
+      (session) =>
+        (session.status === "created" || session.status === "connecting") &&
+        session.transport === "sip" &&
+        !session.claimedAt &&
+        !/localhost/i.test(session.agentDestination)
+    )
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt))[0];
 
   if (!nextSession) {
-    return createSyntheticBridgeSession();
+    throw new Error("No unclaimed live SIP bridge sessions are waiting to be claimed.");
   }
 
+  const claimedSession =
+    (await db.updateBridgeSession(nextSession.id, (current) => ({
+      ...current,
+      claimedAt: new Date().toISOString(),
+      claimCount: (current.claimCount ?? 0) + 1,
+      updatedAt: new Date().toISOString()
+    }))) ?? nextSession;
+
   return {
-    bridgeSession: nextSession,
-    mediaWebsocketUrl: buildBridgeMediaWebSocketUrl(nextSession.id)
+    bridgeSession: claimedSession,
+    mediaWebsocketUrl: buildBridgeMediaWebSocketUrl(claimedSession.id)
   };
-}
-
-async function createSyntheticBridgeSession() {
-  const correlationId = crypto.randomUUID();
-  const now = new Date().toISOString();
-
-  const product = await db.putProduct({
-    id: `product_${crypto.randomUUID()}`,
-    workspaceId: "default",
-    name: "AI Sales Demo",
-    description: "Synthetic ingress demo product for FreeSWITCH bridge validation.",
-    offerSummary: "A live AI calling assistant that handles cold outreach and books meetings.",
-    icpSummary: "Small and mid-market teams that need outbound sales coverage.",
-    createdAt: now
-  });
-
-  const company = await db.putCompany({
-    id: `company_${crypto.randomUUID()}`,
-    workspaceId: "default",
-    name: "Demo Prospect Inc.",
-    website: "https://example.com",
-    phoneNumber: "+15550001111",
-    industry: "Software",
-    createdAt: now
-  });
-
-  const contact = await db.putContact({
-    id: `contact_${crypto.randomUUID()}`,
-    workspaceId: "default",
-    companyId: company.id,
-    name: "Demo Contact",
-    title: "Operations Lead",
-    phoneNumber: "+15550001111",
-    createdAt: now
-  });
-
-  const prospect = await db.putProspect({
-    id: `prospect_${crypto.randomUUID()}`,
-    workspaceId: "default",
-    productId: product.id,
-    companyId: company.id,
-    contactId: contact.id,
-    state: "READY_TO_CALL",
-    sourceMode: "direct",
-    createdAt: now,
-    updatedAt: now
-  });
-
-  await db.putResearchPacket({
-    id: `research_${crypto.randomUUID()}`,
-    workspaceId: "default",
-    prospectId: prospect.id,
-    companySummary: "Synthetic demo company for live bridge validation.",
-    personaSummary: "Synthetic operations lead used for telephony ingress smoke tests.",
-    pains: ["slow follow-up", "manual outbound work"],
-    hooks: ["live AI sales calls", "automatic meeting booking"],
-    buyingSignals: ["reaching out", "inbound interest"],
-    sourceNotes: ["generated locally on the FreeSWITCH VM"],
-    confidence: 0.5,
-    createdAt: now
-  });
-
-  const callBrief = await db.putCallBrief({
-    id: `brief_${crypto.randomUUID()}`,
-    workspaceId: "default",
-    prospectId: prospect.id,
-    productId: product.id,
-    summary: "Synthetic demo brief for FreeSWITCH bridge validation.",
-    valueProps: [
-      "AI handles the first cold call",
-      "Books positive meetings automatically",
-      "Keeps the call concise and relevant"
-    ],
-    painPoints: ["too much manual outreach", "lost follow-up opportunities"],
-    proofPoints: ["realtime voice", "call scoring", "meeting booking"],
-    openingLines: [
-      "Hey, this is the AI assistant calling about outbound sales coverage.",
-      "Hi, I’m following up on a cold outreach workflow for your team."
-    ],
-    qualificationQuestions: ["Who handles outbound today?", "How are you booking meetings now?"],
-    objectionTree: [
-      {
-        objection: "not interested",
-        intent: "brush-off",
-        recommendedResponse: "Fair enough. I only need 20 seconds to see if it’s relevant.",
-        followupQuestion: "Who owns outbound follow-up on your side?"
-      }
-    ],
-    ctaOptions: ["book_demo", "callback", "send_info"],
-    riskFlags: ["synthetic_demo_only"],
-    forbiddenClaims: ["guaranteed deals"],
-    promptVersion: "synthetic-v1",
-    playbookVersion: "synthetic-v1",
-    createdAt: now
-  });
-
-  await db.putPolicyDecision({
-    id: `policy_${crypto.randomUUID()}`,
-    workspaceId: "default",
-    prospectId: prospect.id,
-    status: "allowed",
-    reasons: ["synthetic demo session created on demand"],
-    createdAt: now
-  });
-
-  const callSession = await db.putCallSession({
-    id: `call_${crypto.randomUUID()}`,
-    workspaceId: "default",
-    prospectId: prospect.id,
-    callBriefId: callBrief.id,
-    telephonyProvider: "sonetel",
-    status: "queued",
-    providerMetadata: {
-      synthetic: true,
-      source: "bridge-gateway-claim-next"
-    },
-    strategyVersion: "synthetic-v1",
-    createdAt: now
-  });
-
-  return createBridgeSession({
-    callSessionId: callSession.id,
-    prospectId: prospect.id,
-    agentDestination: "sip:agent@localhost",
-    transport: "sip",
-    correlationId
-  });
 }
 
 export async function ingestBridgeEvent(

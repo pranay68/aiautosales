@@ -206,6 +206,8 @@ export type BridgeSession = {
   transport: "sip" | "websocket" | "simulation";
   agentDestination: string;
   voiceSessionId?: string;
+  claimedAt?: string;
+  claimCount?: number;
   lastEvent?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
