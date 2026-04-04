@@ -1,8 +1,38 @@
 import readline from "node:readline/promises";
+import { createServer } from "node:net";
 import { stdin as input, stdout as output } from "node:process";
 
 process.env.DB_PROVIDER = process.env.DB_PROVIDER || "memory";
 process.env.SONETEL_ENABLE_LIVE_OUTBOUND = "false";
+
+async function reserveFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.unref();
+    server.on("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close(() => reject(new Error("Failed to determine a free local port.")));
+        return;
+      }
+
+      const { port } = address;
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve(port);
+      });
+    });
+  });
+}
+
+const bridgePort = await reserveFreePort();
+process.env.BRIDGE_GATEWAY_PORT = String(bridgePort);
+process.env.BRIDGE_GATEWAY_PUBLIC_BASE_URL = `http://127.0.0.1:${bridgePort}`;
 
 const { db } = await import("@aiautosales/db");
 const { runDirectLeadWorkflow } = await import("@aiautosales/orchestrator");
@@ -41,11 +71,11 @@ const scenario = {
     "24/7 AI reception for dental clinics. Handles missed calls, after-hours booking, basic insurance and service questions, and captures every lead. Typical pricing lands between $1,000 and $10,000 depending on setup and scope.",
   icpSummary:
     "Owner-led and multi-location dental clinics losing appointments from missed calls, after-hours leakage, lunch-break gaps, and overloaded front-desk teams.",
-  companyName: "BrightSmile Dental Clinic",
-  companyWebsite: "https://www.brightsmiledentalclinic.com",
+  companyName: "BrightSmile Dental",
+  companyWebsite: "https://www.brightsmiledental.com",
   phoneNumber: "+15551234567",
-  contactName: "Dr. Maya Patel",
-  contactTitle: "Practice Owner",
+  contactName: "Jordan Reed",
+  contactTitle: "Practice Manager",
   notes:
     "This is a local rehearsal with a real human acting as the prospect. Treat the prospect as the owner or manager of a dental clinic. Likely pains: after-hours call leakage, missed new-patient inquiries, front-desk overload during peak hours, voicemail drop-off, weekend booking loss, and inconsistent appointment capture. Focus on booking a short discovery or demo, not forcing a hard close."
 };
@@ -53,6 +83,7 @@ const scenario = {
 console.log("Local sales rehearsal");
 console.log("Scenario: AI receptionist selling into a dental clinic.");
 console.log("Type like a chaotic prospect. Commands: /end, /snapshot, /help");
+console.log(`Local bridge port: ${bridgePort}`);
 console.log(
   JSON.stringify(
     {
@@ -118,6 +149,18 @@ async function printNewTurns() {
     console.log(`${label}: ${turn.text}`);
   }
   lastTranscriptCount = turns.length;
+}
+
+async function waitForFreshAgentTurn(previousAgentTurnCount: number) {
+  await waitFor(
+    async () => {
+      const turns = await db.listTranscriptTurns(workflow.callSession!.id);
+      const agentTurnCount = turns.filter((turn) => turn.speaker === "agent").length;
+      return agentTurnCount > previousAgentTurnCount ? true : null;
+    },
+    30000,
+    "Timed out waiting for agent response."
+  );
 }
 
 await waitFor(
@@ -223,14 +266,9 @@ while (true) {
     correlationId
   );
 
-  await waitFor(
-    async () => {
-      const turns = await db.listTranscriptTurns(workflow.callSession!.id);
-      return turns.length > lastTranscriptCount ? true : null;
-    },
-    30000,
-    "Timed out waiting for agent response."
-  );
+  const turnsBeforeResponse = await db.listTranscriptTurns(workflow.callSession!.id);
+  const previousAgentTurnCount = turnsBeforeResponse.filter((turn) => turn.speaker === "agent").length;
+  await waitForFreshAgentTurn(previousAgentTurnCount);
 
   await printNewTurns();
 }
