@@ -127,10 +127,10 @@ async function requestJson(input: {
   };
 }
 
-export async function getSonetelAccessToken(): Promise<string> {
+export async function getSonetelAccessToken(forceRefresh = false): Promise<string> {
   const env = loadEnv();
 
-  if (env.sonetelAccessToken) {
+  if (env.sonetelAccessToken && !forceRefresh) {
     return env.sonetelAccessToken;
   }
 
@@ -186,9 +186,9 @@ export function deriveSonetelUserId(accessToken: string): string {
   return String(decoded.user_id);
 }
 
-export async function buildSonetelAuthContext(): Promise<SonetelAuthContext> {
+export async function buildSonetelAuthContext(forceRefresh = false): Promise<SonetelAuthContext> {
   const env = loadEnv();
-  const accessToken = await getSonetelAccessToken();
+  const accessToken = await getSonetelAccessToken(forceRefresh);
   const accountId = env.sonetelAccountId || deriveSonetelAccountId(accessToken);
   const userId = deriveSonetelUserId(accessToken);
 
@@ -235,6 +235,14 @@ export async function syncSonetelAgentForwarding(): Promise<{
   rawResponse: unknown;
 }> {
   const auth = await buildSonetelAuthContext();
+  return syncSonetelAgentForwardingWithContext(auth);
+}
+
+async function syncSonetelAgentForwardingWithContext(auth: SonetelAuthContext): Promise<{
+  endpoint: string;
+  payload: Record<string, unknown>;
+  rawResponse: unknown;
+}> {
   ensureLiveOutboundReady(auth);
 
   const endpoint = getCallForwardingEndpoint(auth.apiBaseUrl, auth.accountId, auth.outgoingCallerId);
@@ -276,8 +284,8 @@ function normalizeSonetelSipTarget(destination: string): string {
 }
 
 export async function executeSonetelOutboundCall(input: SonetelCallRequest): Promise<SonetelExecutionResult> {
-  const request = await createSonetelCallRequest(input);
-  const auth = await buildSonetelAuthContext();
+  let auth = await buildSonetelAuthContext();
+  let request = await createSonetelCallRequest(input);
 
   if (!auth.liveOutboundEnabled) {
     return {
@@ -289,16 +297,42 @@ export async function executeSonetelOutboundCall(input: SonetelCallRequest): Pro
   }
 
   ensureLiveOutboundReady(auth);
-  const forwarding = isEmailDestination(auth.agentDestination)
-    ? undefined
-    : await syncSonetelAgentForwarding();
-
-  const response = await requestJson({
+  let forwarding =
+    isEmailDestination(auth.agentDestination) ? undefined : await syncSonetelAgentForwardingWithContext(auth);
+  let response = await requestJson({
     method: "POST",
     endpoint: request.endpoint,
     headers: request.headers,
     body: request.payload
   });
+
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    const shouldRetry = response.statusCode === 404 || response.statusCode >= 500;
+    if (shouldRetry) {
+      auth = await buildSonetelAuthContext(true);
+      request = {
+        provider: auth.provider,
+        accountId: auth.accountId,
+        endpoint: auth.callbackEndpoint,
+        headers: {
+          Authorization: `Bearer ${auth.accessToken}`,
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "User-Agent": "aiautosales/1.0"
+        },
+        payload: request.payload
+      };
+      forwarding = isEmailDestination(auth.agentDestination)
+        ? undefined
+        : await syncSonetelAgentForwardingWithContext(auth);
+      response = await requestJson({
+        method: "POST",
+        endpoint: request.endpoint,
+        headers: request.headers,
+        body: request.payload
+      });
+    }
+  }
 
   if (response.statusCode < 200 || response.statusCode >= 300) {
     throw new Error(
