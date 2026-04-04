@@ -513,12 +513,28 @@ export async function appendTranscriptTurn(input: {
     throw new Error(`Unknown call session ${input.callSessionId}`);
   }
 
+  const normalizedText = input.text.trim();
+  if (!normalizedText) {
+    throw new Error("Cannot append an empty transcript turn.");
+  }
+
+  const existingTurns = await db.listTranscriptTurns(input.callSessionId);
+  const lastTurn = existingTurns.at(-1);
+  if (
+    lastTurn &&
+    lastTurn.speaker === input.speaker &&
+    lastTurn.text.trim() === normalizedText &&
+    Math.abs(new Date().getTime() - new Date(lastTurn.timestamp).getTime()) < 5000
+  ) {
+    return lastTurn;
+  }
+
   const turn: TranscriptTurn = {
     id: crypto.randomUUID(),
     workspaceId: session.workspaceId,
     callSessionId: input.callSessionId,
     speaker: input.speaker,
-    text: input.text,
+    text: normalizedText,
     timestamp: new Date().toISOString()
   };
 

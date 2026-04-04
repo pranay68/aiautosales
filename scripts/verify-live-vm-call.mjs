@@ -8,7 +8,7 @@ const attempts = Number.parseInt(process.argv[3] ?? "1", 10);
 const baseUrl = process.env.AIAUTOSALES_VERIFY_BASE_URL ?? "http://20.69.177.225:4000";
 const apiKey = process.env.AIAUTOSALES_VERIFY_API_KEY ?? "vm-bootstrap-key-20260404";
 const workspaceId = process.env.AIAUTOSALES_VERIFY_WORKSPACE ?? "live-vm";
-const pollAttempts = Number.parseInt(process.env.AIAUTOSALES_VERIFY_POLL_ATTEMPTS ?? "18", 10);
+const pollAttempts = Number.parseInt(process.env.AIAUTOSALES_VERIFY_POLL_ATTEMPTS ?? "36", 10);
 const pollIntervalMs = Number.parseInt(process.env.AIAUTOSALES_VERIFY_POLL_INTERVAL_MS ?? "10000", 10);
 
 function wait(ms) {
@@ -145,14 +145,11 @@ async function runAttempt(attemptIndex) {
 
     const callStatus = state.call?.session?.status;
     const bridgeStatus = state.bridge?.status;
-    const transcriptTurns = Array.isArray(state.call?.transcript) ? state.call.transcript.length : 0;
-
     if (
       callStatus === "completed" ||
       callStatus === "failed" ||
       bridgeStatus === "completed" ||
-      bridgeStatus === "failed" ||
-      (transcriptTurns > 0 && (bridgeStatus === "connected" || bridgeStatus === "streaming"))
+      bridgeStatus === "failed"
     ) {
       break;
     }
