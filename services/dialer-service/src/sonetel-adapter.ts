@@ -1,4 +1,5 @@
 import { loadEnv } from "@aiautosales/config";
+import { log } from "@aiautosales/telemetry";
 type SonetelCallRequest = {
   to: string;
   prospectId: string;
@@ -30,6 +31,10 @@ type SonetelAuthContext = {
   callbackEndpoint: string;
   liveOutboundEnabled: boolean;
 };
+
+const SONETEL_RETRYABLE_STATUS_CODES = new Set([404, 429, 500, 502, 503, 504]);
+const SONETEL_MAX_ATTEMPTS = 3;
+const SONETEL_FORWARDING_SETTLE_MS = 1200;
 
 function normalizeBaseUrl(url: string): string {
   return url.endsWith("/") ? url.slice(0, -1) : url;
@@ -208,6 +213,7 @@ export async function buildSonetelAuthContext(forceRefresh = false): Promise<Son
 
 export async function createSonetelCallRequest(input: SonetelCallRequest) {
   const auth = await buildSonetelAuthContext();
+  const call1 = normalizeSonetelSipTarget(auth.call1Destination);
 
   return {
     provider: auth.provider,
@@ -221,7 +227,7 @@ export async function createSonetelCallRequest(input: SonetelCallRequest) {
     },
     payload: {
       app_id: `aiautosales:${input.prospectId}`,
-      call1: auth.call1Destination,
+      call1,
       call2: input.to,
       show_1: "automatic",
       show_2: getDisplayNumber(auth.outgoingCallerId)
@@ -251,24 +257,41 @@ async function syncSonetelAgentForwardingWithContext(auth: SonetelAuthContext): 
     connect_to: auth.userId
   };
 
-  const response = await requestJson({
-    method: "PUT",
-    endpoint,
-    headers: {
-      Authorization: `Bearer ${auth.accessToken}`,
-      "Content-Type": "application/json",
-      Accept: "application/json"
-    },
-    body: payload
-  });
+  let lastResponse: JsonResponse | undefined;
+  for (let attempt = 1; attempt <= SONETEL_MAX_ATTEMPTS; attempt += 1) {
+    const response = await requestJson({
+      method: "PUT",
+      endpoint,
+      headers: {
+        Authorization: `Bearer ${auth.accessToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      },
+      body: payload
+    });
+    lastResponse = response;
 
-  if (response.statusCode < 200 || response.statusCode >= 300) {
-    throw new Error(
-      `Sonetel call forwarding update failed with status ${response.statusCode}: ${JSON.stringify(response.bodyJson ?? response.bodyText)}`
-    );
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return { endpoint, payload, rawResponse: response.bodyJson };
+    }
+
+    log("warn", "sonetel.forwarding.retryable_failure", {
+      attempt,
+      endpoint,
+      statusCode: response.statusCode,
+      body: response.bodyJson ?? response.bodyText
+    });
+
+    if (!SONETEL_RETRYABLE_STATUS_CODES.has(response.statusCode) || attempt === SONETEL_MAX_ATTEMPTS) {
+      break;
+    }
+
+    await waitForSonetelBackoff(attempt);
   }
 
-  return { endpoint, payload, rawResponse: response.bodyJson };
+  throw new Error(
+    `Sonetel call forwarding update failed with status ${lastResponse?.statusCode}: ${JSON.stringify(lastResponse?.bodyJson ?? lastResponse?.bodyText)}`
+  );
 }
 
 function normalizeSonetelSipTarget(destination: string): string {
@@ -297,18 +320,11 @@ export async function executeSonetelOutboundCall(input: SonetelCallRequest): Pro
   }
 
   ensureLiveOutboundReady(auth);
-  let forwarding =
-    isEmailDestination(auth.agentDestination) ? undefined : await syncSonetelAgentForwardingWithContext(auth);
-  let response = await requestJson({
-    method: "POST",
-    endpoint: request.endpoint,
-    headers: request.headers,
-    body: request.payload
-  });
+  let forwarding: { endpoint: string; payload: Record<string, unknown>; rawResponse: unknown } | undefined;
+  let response: JsonResponse | undefined;
 
-  if (response.statusCode < 200 || response.statusCode >= 300) {
-    const shouldRetry = response.statusCode === 404 || response.statusCode >= 500;
-    if (shouldRetry) {
+  for (let attempt = 1; attempt <= SONETEL_MAX_ATTEMPTS; attempt += 1) {
+    if (attempt > 1) {
       auth = await buildSonetelAuthContext(true);
       request = {
         provider: auth.provider,
@@ -320,23 +336,50 @@ export async function executeSonetelOutboundCall(input: SonetelCallRequest): Pro
           "Content-Type": "application/json",
           "User-Agent": "aiautosales/1.0"
         },
-        payload: request.payload
+        payload: {
+          ...request.payload,
+          call1: normalizeSonetelSipTarget(auth.call1Destination)
+        }
       };
-      forwarding = isEmailDestination(auth.agentDestination)
-        ? undefined
-        : await syncSonetelAgentForwardingWithContext(auth);
-      response = await requestJson({
-        method: "POST",
-        endpoint: request.endpoint,
-        headers: request.headers,
-        body: request.payload
-      });
     }
+
+    forwarding = isEmailDestination(auth.agentDestination)
+      ? undefined
+      : await syncSonetelAgentForwardingWithContext(auth);
+
+    if (forwarding) {
+      await wait(SONETEL_FORWARDING_SETTLE_MS);
+    }
+
+    response = await requestJson({
+      method: "POST",
+      endpoint: request.endpoint,
+      headers: request.headers,
+      body: request.payload
+    });
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      break;
+    }
+
+    log("warn", "sonetel.callback.retryable_failure", {
+      attempt,
+      endpoint: request.endpoint,
+      payload: request.payload,
+      statusCode: response.statusCode,
+      body: response.bodyJson ?? response.bodyText
+    });
+
+    if (!SONETEL_RETRYABLE_STATUS_CODES.has(response.statusCode) || attempt === SONETEL_MAX_ATTEMPTS) {
+      break;
+    }
+
+    await waitForSonetelBackoff(attempt);
   }
 
-  if (response.statusCode < 200 || response.statusCode >= 300) {
+  if (!response || response.statusCode < 200 || response.statusCode >= 300) {
     throw new Error(
-      `Sonetel outbound call failed with status ${response.statusCode}: ${JSON.stringify(response.bodyJson ?? response.bodyText)}`
+      `Sonetel outbound call failed with status ${response?.statusCode}: ${JSON.stringify(response?.bodyJson ?? response?.bodyText)}`
     );
   }
 
@@ -358,6 +401,16 @@ export async function executeSonetelOutboundCall(input: SonetelCallRequest): Pro
       forwarding
     }
   };
+}
+
+async function wait(durationMs: number) {
+  await new Promise((resolve) => setTimeout(resolve, durationMs));
+}
+
+async function waitForSonetelBackoff(attempt: number) {
+  const base = 1000 * attempt;
+  const jitter = Math.floor(Math.random() * 500);
+  await wait(base + jitter);
 }
 
 export function normalizeSonetelWebhookEvent(input: unknown) {
