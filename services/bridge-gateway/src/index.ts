@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import WebSocket, { WebSocketServer } from "ws";
 import { loadEnv } from "@aiautosales/config";
 import { db } from "@aiautosales/db";
-import { createCorrelationId, log } from "@aiautosales/telemetry";
+import { createCorrelationId, initializeTelemetry, log, withSpan } from "@aiautosales/telemetry";
 import {
   buildBridgeMediaWebSocketUrl,
   claimNextBridgeSession,
@@ -25,8 +25,23 @@ export {
   listBridgeSessions
 };
 
+initializeTelemetry("bridge-gateway");
 export const app = express();
 app.use(express.json());
+
+app.use((request, response, next) => {
+  const startedAt = Date.now();
+  response.on("finish", () => {
+    log("info", "http.request.completed", {
+      method: request.method,
+      path: request.path,
+      statusCode: response.statusCode,
+      durationMs: Date.now() - startedAt,
+      correlationId: request.header("x-correlation-id") ?? null
+    });
+  });
+  next();
+});
 
 app.get("/health", (_request, response) => {
   response.json({ ok: true });
@@ -75,14 +90,26 @@ app.post("/bridge-sessions", async (request, response) => {
     return;
   }
 
+  const callSessionId = body.callSessionId;
+  const prospectId = body.prospectId;
+
   try {
-    const result = await createBridgeSession({
-      callSessionId: body.callSessionId,
-      prospectId: body.prospectId,
-      transport: body.transport,
-      agentDestination: body.agentDestination,
-      correlationId
-    });
+    const result = await withSpan(
+      "bridge-gateway.create-session",
+      {
+        "aiautosales.call_session_id": callSessionId,
+        "aiautosales.prospect_id": prospectId,
+        "aiautosales.transport": body.transport ?? "sip"
+      },
+      () =>
+        createBridgeSession({
+          callSessionId,
+          prospectId,
+          transport: body.transport,
+          agentDestination: body.agentDestination,
+          correlationId
+        })
+    );
 
     response.status(201).json(result);
   } catch (error) {

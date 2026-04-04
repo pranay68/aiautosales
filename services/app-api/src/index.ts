@@ -7,8 +7,9 @@ import { getBridgeSession, ingestBridgeEvent, listBridgeSessions } from "@aiauto
 import { getSonetelValidationSummary, handleSonetelWebhook } from "@aiautosales/dialer-service";
 import { createFollowupTask, getCallBrief, lookupProductFact } from "@aiautosales/live-tool-service";
 import { runDirectLeadWorkflow } from "@aiautosales/orchestrator";
-import { createCorrelationId, log } from "@aiautosales/telemetry";
+import { createCorrelationId, initializeTelemetry, log, withSpan } from "@aiautosales/telemetry";
 
+initializeTelemetry("app-api");
 const app = express();
 app.use(express.json());
 
@@ -42,6 +43,21 @@ app.use((request, _response, next) => {
 app.use((request: WorkspaceRequest, _response, next) => {
   const env = loadEnv();
   request.workspaceId = request.header("x-workspace-id") ?? env.defaultWorkspaceId;
+  next();
+});
+
+app.use((request: WorkspaceRequest, response, next) => {
+  const startedAt = Date.now();
+  response.on("finish", () => {
+    log("info", "http.request.completed", {
+      method: request.method,
+      path: request.path,
+      statusCode: response.statusCode,
+      durationMs: Date.now() - startedAt,
+      correlationId: request.header("x-correlation-id") ?? null,
+      workspaceId: request.workspaceId ?? null
+    });
+  });
   next();
 });
 
@@ -199,7 +215,14 @@ app.post("/products", async (request: WorkspaceRequest, response) => {
 app.post("/direct-calls", async (request: WorkspaceRequest, response) => {
   const workspaceId = request.workspaceId ?? loadEnv().defaultWorkspaceId;
   const input = directCallSchema.parse({ ...request.body, workspaceId });
-  const result = await runDirectLeadWorkflow(input);
+  const result = await withSpan(
+    "app-api.direct-call",
+    {
+      "aiautosales.workspace_id": workspaceId,
+      "aiautosales.product_id": input.productId
+    },
+    () => runDirectLeadWorkflow(input)
+  );
   response.status(201).json(result);
 });
 

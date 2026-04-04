@@ -31,6 +31,12 @@ The operator console starts on `http://localhost:3000`.
 
 Set `OPERATOR_API_KEY` in `.env` and use that same value in the web console or as the `x-api-key` header for API calls. Set `DEFAULT_WORKSPACE_ID` for the default tenant boundary, or override it per request with `x-workspace-id`. `GET /health` can remain unauthenticated when `ALLOW_UNAUTHENTICATED_HEALTH=true`.
 
+Telemetry:
+
+- set `APPLICATIONINSIGHTS_CONNECTION_STRING` to enable Azure Monitor export from the API, bridge gateway, and Temporal worker
+- request completion telemetry is emitted for the operator API and bridge gateway
+- direct-call and bridge-session creation paths now emit traced spans when Azure Monitor is configured
+
 Useful validation commands:
 
 ```bash
