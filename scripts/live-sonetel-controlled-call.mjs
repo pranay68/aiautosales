@@ -139,12 +139,16 @@ try {
     body: JSON.stringify({
       productId: product.body.id,
       companyName: "Controlled Live Prospect",
+      companyWebsite: "https://example.com",
       phoneNumber: targetNumber,
       contactName: "Controlled Contact",
       autoStart: true
     })
   });
-  assert(directCall.response.status === 201, `Expected direct call 201, got ${directCall.response.status}`);
+  assert(
+    directCall.response.status === 201,
+    `Expected direct call 201, got ${directCall.response.status}: ${JSON.stringify(directCall.body)}`
+  );
 
   const callSessionId = directCall.body.callSession?.id;
   const bridgeSessionId = directCall.body.bridgeSession?.id;
