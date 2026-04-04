@@ -33,29 +33,63 @@ const rl = readline.createInterface({ input, output });
 let sessionClosed = false;
 const correlationId = crypto.randomUUID();
 const workspaceId = "local-rehearsal";
+const scenario = {
+  productName: "FrontDesk AI Reception",
+  productDescription:
+    "AI receptionist for dental clinics that answers calls, handles FAQs, captures leads, and books appointments around the clock.",
+  offerSummary:
+    "24/7 AI reception for dental clinics. Handles missed calls, after-hours booking, basic insurance and service questions, and captures every lead. Typical pricing lands between $1,000 and $10,000 depending on setup and scope.",
+  icpSummary:
+    "Owner-led and multi-location dental clinics losing appointments from missed calls, after-hours leakage, lunch-break gaps, and overloaded front-desk teams.",
+  companyName: "BrightSmile Dental Clinic",
+  companyWebsite: "https://www.brightsmiledentalclinic.com",
+  phoneNumber: "+15551234567",
+  contactName: "Dr. Maya Patel",
+  contactTitle: "Practice Owner",
+  notes:
+    "This is a local rehearsal with a real human acting as the prospect. Treat the prospect as the owner or manager of a dental clinic. Likely pains: after-hours call leakage, missed new-patient inquiries, front-desk overload during peak hours, voicemail drop-off, weekend booking loss, and inconsistent appointment capture. Focus on booking a short discovery or demo, not forcing a hard close."
+};
 
 console.log("Local sales rehearsal");
+console.log("Scenario: AI receptionist selling into a dental clinic.");
 console.log("Type like a chaotic prospect. Commands: /end, /snapshot, /help");
+console.log(
+  JSON.stringify(
+    {
+      product: scenario.productName,
+      targetCompany: scenario.companyName,
+      targetContact: `${scenario.contactName} (${scenario.contactTitle})`,
+      keyPainPoints: [
+        "after-hours leakage",
+        "missed new-patient calls",
+        "front-desk overload",
+        "weekend booking loss"
+      ]
+    },
+    null,
+    2
+  )
+);
 
 const product = await db.putProduct({
   id: crypto.randomUUID(),
   workspaceId,
-  name: "AI AutoSales",
-  description: "Autonomous outbound caller that researches, strategizes, calls, and drives next steps.",
-  offerSummary: "AI agent that handles cold calling and books qualified meetings.",
-  icpSummary: "Revenue leaders, ops leaders, and founder-led teams that need more outbound throughput.",
+  name: scenario.productName,
+  description: scenario.productDescription,
+  offerSummary: scenario.offerSummary,
+  icpSummary: scenario.icpSummary,
   createdAt: new Date().toISOString()
 });
 
 const workflow = await runDirectLeadWorkflow({
   workspaceId,
   productId: product.id,
-  companyName: "Chaotic Prospect Co",
-  companyWebsite: "https://example.com",
-  phoneNumber: "+15551234567",
-  contactName: "Chaos Prospect",
-  contactTitle: "Unknown",
-  notes: "This is a local rehearsal. The prospect may be skeptical, chaotic, distracted, hostile, or curious.",
+  companyName: scenario.companyName,
+  companyWebsite: scenario.companyWebsite,
+  phoneNumber: scenario.phoneNumber,
+  contactName: scenario.contactName,
+  contactTitle: scenario.contactTitle,
+  notes: scenario.notes,
   autoStart: true
 });
 
