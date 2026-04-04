@@ -1,5 +1,4 @@
 import { db } from "@aiautosales/db";
-import { createBridgeSession } from "@aiautosales/bridge-gateway";
 import { queueOutboundCall } from "@aiautosales/dialer-service";
 import type {
   CallBrief,
@@ -117,7 +116,7 @@ export async function runDirectLeadWorkflow(request: DirectCallRequest): Promise
     });
 
     await db.updateProspect(prospect.id, (current) => ({ ...current, state: "DIALING", updatedAt: new Date().toISOString() }));
-    const bridgeResult = await createBridgeSession({
+    const bridgeResult = await createLiveBridgeSession({
       callSessionId: callSession.id,
       prospectId: prospect.id,
       agentDestination: env.sonetelAgentDestination,
@@ -171,6 +170,35 @@ export async function runDirectLeadWorkflow(request: DirectCallRequest): Promise
     bridgeSession,
     evaluation
   };
+}
+
+async function createLiveBridgeSession(input: {
+  callSessionId: string;
+  prospectId: string;
+  agentDestination?: string;
+  correlationId: string;
+}) {
+  const env = loadEnv();
+  const bridgeBaseUrl = env.bridgeGatewayPublicBaseUrl || `http://127.0.0.1:${env.bridgeGatewayPort}`;
+  const response = await fetch(`${bridgeBaseUrl}/bridge-sessions`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-correlation-id": input.correlationId
+    },
+    body: JSON.stringify({
+      callSessionId: input.callSessionId,
+      prospectId: input.prospectId,
+      transport: "sip",
+      agentDestination: input.agentDestination
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Bridge session creation failed with status ${response.status}: ${await response.text()}`);
+  }
+
+  return (await response.json()) as { bridgeSession: BridgeSession };
 }
 
 function runPolicyGate(prospectId: string, callBrief: CallBrief, request: DirectCallRequest): PolicyDecision {
