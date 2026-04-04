@@ -31,6 +31,13 @@ The operator console starts on `http://localhost:3000`.
 
 Set `OPERATOR_API_KEY` in `.env` and use that same value in the web console or as the `x-api-key` header for API calls. Set `DEFAULT_WORKSPACE_ID` for the default tenant boundary, or override it per request with `x-workspace-id`. `GET /health` can remain unauthenticated when `ALLOW_UNAUTHENTICATED_HEALTH=true`.
 
+Operator auth:
+
+- bootstrap the first workspace/operator with `POST /auth/bootstrap` using `x-api-key: $OPERATOR_API_KEY`
+- log in with `POST /auth/login`
+- use `Authorization: Bearer <token>` for workspace-scoped operator access
+- legacy `x-api-key` access still works for admin/bootstrap and local ops, but bearer auth is now the intended path
+
 Telemetry:
 
 - set `APPLICATIONINSIGHTS_CONNECTION_STRING` to enable Azure Monitor export from the API, bridge gateway, and Temporal worker
@@ -44,6 +51,9 @@ npm run validate:azure-realtime
 npm run validate:bridge-config
 npm run validate:sonetel-config
 npm run refresh:sonetel-token
+npm run smoke:workspace-isolation
+npm run smoke:auth-idempotency
+npm run smoke:bridge-realtime
 ```
 
 Telephony safety:
@@ -59,6 +69,11 @@ Useful provider endpoints:
 - `GET /providers/bridge/validate`
 - `POST /providers/sonetel/webhooks`
 - `GET /dashboard`
+- `GET /workflow-runs`
+- `GET /audit-entries`
+- `GET /diagnostics/summary`
+- `GET /diagnostics/failures`
+- `GET /me`
 
 FreeSWITCH ingress:
 
@@ -95,4 +110,4 @@ Still stubbed:
 
 - Azure VM deployment has not been executed yet
 - Sonetel live outbound is still blocked until the Azure SIP ingress exists and is pointed at `SONETEL_AGENT_DESTINATION`
-- production auth and multi-tenant controls
+- some production auth features still need more depth, such as password reset, MFA, and richer RBAC policy

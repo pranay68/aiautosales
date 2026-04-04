@@ -4,18 +4,24 @@ import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { loadEnv } from "@aiautosales/config";
 import type {
+  AuditEntry,
   BridgeSession,
   CallBrief,
   CallSession,
   Company,
   Contact,
   FollowupTask,
+  IdempotencyRecord,
+  OperatorAccount,
+  OperatorSession,
   PolicyDecision,
   Product,
   Prospect,
   SequencePlan,
   ResearchPacket,
-  TranscriptTurn
+  TranscriptTurn,
+  WorkflowRun,
+  Workspace
 } from "@aiautosales/domain-models";
 import type { DomainEvent } from "@aiautosales/shared-events";
 
@@ -31,7 +37,13 @@ type RecordKind =
   | "bridgeSessions"
   | "sequencePlans"
   | "transcriptTurns"
-  | "followups";
+  | "followups"
+  | "workspaces"
+  | "operatorAccounts"
+  | "operatorSessions"
+  | "workflowRuns"
+  | "idempotencyRecords"
+  | "auditEntries";
 
 type Store = {
   products: Map<string, Product>;
@@ -46,6 +58,12 @@ type Store = {
   sequencePlans: Map<string, SequencePlan>;
   transcriptTurns: Map<string, TranscriptTurn>;
   followups: Map<string, FollowupTask>;
+  workspaces: Map<string, Workspace>;
+  operatorAccounts: Map<string, OperatorAccount>;
+  operatorSessions: Map<string, OperatorSession>;
+  workflowRuns: Map<string, WorkflowRun>;
+  idempotencyRecords: Map<string, IdempotencyRecord>;
+  auditEntries: Map<string, AuditEntry>;
   events: DomainEvent[];
 };
 
@@ -62,6 +80,12 @@ const memoryStore: Store = {
   sequencePlans: new Map(),
   transcriptTurns: new Map(),
   followups: new Map(),
+  workspaces: new Map(),
+  operatorAccounts: new Map(),
+  operatorSessions: new Map(),
+  workflowRuns: new Map(),
+  idempotencyRecords: new Map(),
+  auditEntries: new Map(),
   events: []
 };
 
@@ -183,6 +207,45 @@ async function filterByWorkspace<T>(kind: RecordKind, workspaceId: string): Prom
 export const db = {
   init: ensureInitialized,
   putProduct: (value: Product) => putRecord("products", value),
+  putWorkspace: (value: Workspace) => putRecord("workspaces", value),
+  getWorkspace: (id: string) => getRecord<Workspace>("workspaces", id),
+  listWorkspaces: () => listRecords<Workspace>("workspaces"),
+  putOperatorAccount: (value: OperatorAccount) => putRecord("operatorAccounts", value),
+  getOperatorAccount: (id: string) => getRecord<OperatorAccount>("operatorAccounts", id),
+  findOperatorAccountByEmail: (workspaceId: string, email: string) =>
+    findOneBy<OperatorAccount>(
+      "operatorAccounts",
+      (entry) => entry.workspaceId === workspaceId && entry.email.toLowerCase() === email.toLowerCase()
+    ),
+  listOperatorAccountsByWorkspace: (workspaceId: string) =>
+    filterByWorkspace<OperatorAccount>("operatorAccounts", workspaceId),
+  updateOperatorAccount: (id: string, updater: (current: OperatorAccount) => OperatorAccount) =>
+    updateRecord("operatorAccounts", id, updater),
+  putOperatorSession: (value: OperatorSession) => putRecord("operatorSessions", value),
+  getOperatorSession: (id: string) => getRecord<OperatorSession>("operatorSessions", id),
+  findOperatorSessionByTokenHash: (tokenHash: string) =>
+    findOneBy<OperatorSession>(
+      "operatorSessions",
+      (entry) => entry.tokenHash === tokenHash && !entry.revokedAt
+    ),
+  updateOperatorSession: (id: string, updater: (current: OperatorSession) => OperatorSession) =>
+    updateRecord("operatorSessions", id, updater),
+  putWorkflowRun: (value: WorkflowRun) => putRecord("workflowRuns", value),
+  getWorkflowRun: (id: string) => getRecord<WorkflowRun>("workflowRuns", id),
+  updateWorkflowRun: (id: string, updater: (current: WorkflowRun) => WorkflowRun) =>
+    updateRecord("workflowRuns", id, updater),
+  listWorkflowRunsByWorkspace: (workspaceId: string) =>
+    filterByWorkspace<WorkflowRun>("workflowRuns", workspaceId),
+  putIdempotencyRecord: (value: IdempotencyRecord) => putRecord("idempotencyRecords", value),
+  findIdempotencyRecord: (workspaceId: string, scope: IdempotencyRecord["scope"], key: string) =>
+    findOneBy<IdempotencyRecord>(
+      "idempotencyRecords",
+      (entry) => entry.workspaceId === workspaceId && entry.scope === scope && entry.key === key
+    ),
+  updateIdempotencyRecord: (id: string, updater: (current: IdempotencyRecord) => IdempotencyRecord) =>
+    updateRecord("idempotencyRecords", id, updater),
+  putAuditEntry: (value: AuditEntry) => putRecord("auditEntries", value),
+  listAuditEntriesByWorkspace: (workspaceId: string) => filterByWorkspace<AuditEntry>("auditEntries", workspaceId),
   getProduct: (id: string) => getRecord<Product>("products", id),
   listProducts: () => listRecords<Product>("products"),
   listProductsByWorkspace: (workspaceId: string) => filterByWorkspace<Product>("products", workspaceId),
@@ -291,12 +354,15 @@ export const db = {
     return events.filter((event) => hasWorkspaceId(event.payload) && event.payload.workspaceId === workspaceId);
   },
   snapshot: async (workspaceId?: string) => ({
+    workspaces: await db.listWorkspaces(),
     products: workspaceId ? await db.listProductsByWorkspace(workspaceId) : await db.listProducts(),
     prospects: workspaceId ? await db.listProspectsByWorkspace(workspaceId) : await db.listProspects(),
     callSessions: workspaceId ? await db.listCallSessionsByWorkspace(workspaceId) : await db.listCallSessions(),
     bridgeSessions: workspaceId ? await db.listBridgeSessionsByWorkspace(workspaceId) : await db.listBridgeSessions(),
     sequencePlans: workspaceId ? await db.listSequencePlansByWorkspace(workspaceId) : await db.listSequencePlans(),
     followups: workspaceId ? await db.listFollowupsByWorkspace(workspaceId) : await db.listFollowups(),
+    workflowRuns: workspaceId ? await db.listWorkflowRunsByWorkspace(workspaceId) : await listRecords<WorkflowRun>("workflowRuns"),
+    auditEntries: workspaceId ? await db.listAuditEntriesByWorkspace(workspaceId) : await listRecords<AuditEntry>("auditEntries"),
     events: workspaceId ? await db.listEventsByWorkspace(workspaceId) : await db.listEvents()
   })
 };

@@ -1,4 +1,74 @@
 export type EntityId = string;
+export type OperatorRole = "admin" | "operator" | "reviewer" | "analyst";
+
+export type Workspace = {
+  id: EntityId;
+  name: string;
+  createdAt: string;
+};
+
+export type OperatorAccount = {
+  id: EntityId;
+  workspaceId: EntityId;
+  email: string;
+  name: string;
+  role: OperatorRole;
+  passwordHash: string;
+  passwordSalt: string;
+  active: boolean;
+  createdAt: string;
+  lastLoginAt?: string;
+};
+
+export type OperatorSession = {
+  id: EntityId;
+  workspaceId: EntityId;
+  operatorId: EntityId;
+  tokenHash: string;
+  expiresAt: string;
+  createdAt: string;
+  revokedAt?: string;
+};
+
+export type WorkflowRun = {
+  id: EntityId;
+  workspaceId: EntityId;
+  type: "direct_call";
+  status: "in_progress" | "completed" | "failed";
+  requestPayload: Record<string, unknown>;
+  resultPayload?: Record<string, unknown>;
+  errorMessage?: string;
+  correlationId: string;
+  idempotencyKey?: string;
+  operatorId?: EntityId;
+  startedAt: string;
+  completedAt?: string;
+};
+
+export type IdempotencyRecord = {
+  id: EntityId;
+  workspaceId: EntityId;
+  scope: "direct_call";
+  key: string;
+  requestHash: string;
+  status: "in_progress" | "completed" | "failed";
+  workflowRunId?: EntityId;
+  responsePayload?: Record<string, unknown>;
+  errorMessage?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AuditEntry = {
+  id: EntityId;
+  workspaceId: EntityId;
+  operatorId?: EntityId;
+  action: string;
+  resourceType: string;
+  resourceId: EntityId;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+};
 
 export type LeadState =
   | "LEAD_CREATED"
@@ -177,6 +247,8 @@ export type TranscriptTurn = {
 
 export type DirectCallRequest = {
   workspaceId?: EntityId;
+  operatorId?: EntityId;
+  idempotencyKey?: string;
   productId: EntityId;
   companyName: string;
   companyWebsite?: string;
