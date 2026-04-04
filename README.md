@@ -54,7 +54,10 @@ npm run refresh:sonetel-token
 npm run smoke:workspace-isolation
 npm run smoke:auth-idempotency
 npm run smoke:bridge-realtime
+npm run live:sonetel-call -- +12025550123
 ```
+
+`live:sonetel-call` is explicit-target only. It boots a temporary API in memory mode, authenticates, creates a product, submits one real direct-mode outbound call through Sonetel, and prints the resulting workflow, call, bridge, and diagnostics state. Do not run it without an intentional test number.
 
 Telephony safety:
 

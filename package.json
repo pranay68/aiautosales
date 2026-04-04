@@ -15,6 +15,7 @@
     "dev:bridge-gateway": "npm run dev -w @aiautosales/bridge-gateway",
     "dev:web": "npm run dev -w @aiautosales/web",
     "dev": "npm run dev:api",
+    "live:sonetel-call": "node scripts/live-sonetel-controlled-call.mjs",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "validate:azure-realtime": "tsx scripts/validate-azure-realtime.ts",
