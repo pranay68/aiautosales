@@ -161,8 +161,195 @@ const directCallSchema = z.object({
   idempotencyKey: z.string().min(1).optional()
 });
 
+const localRehearsalCreateSchema = z.object({
+  productName: z.string().min(1).default("FrontDesk AI Reception"),
+  productDescription: z.string().min(1).default(
+    "AI receptionist for dental clinics that answers calls, handles FAQs, captures leads, and books appointments around the clock."
+  ),
+  offerSummary: z.string().min(1).default(
+    "24/7 AI reception for dental clinics. Handles missed calls, after-hours booking, basic insurance and service questions, and captures every lead."
+  ),
+  icpSummary: z.string().min(1).default(
+    "Owner-led and multi-location dental clinics losing appointments from missed calls, after-hours leakage, lunch-break gaps, and overloaded front-desk teams."
+  ),
+  companyName: z.string().min(1).default("BrightSmile Dental"),
+  companyWebsite: z.string().default("https://www.brightsmiledental.com"),
+  contactName: z.string().min(1).default("Jordan Reed"),
+  contactTitle: z.string().min(1).default("Practice Manager"),
+  phoneNumber: z.string().min(1).default("+15551234567"),
+  notes: z.string().default(
+    "This is a local rehearsal with a real human acting as the prospect. Treat the prospect as the owner or manager of a dental clinic. Likely pains: after-hours call leakage, missed new-patient inquiries, front-desk overload during peak hours, voicemail drop-off, weekend booking loss, and inconsistent appointment capture. Focus on booking a short discovery or demo, not forcing a hard close."
+  )
+});
+
+const localRehearsalMessageSchema = z.object({
+  text: z.string().min(1)
+});
+
+type LocalRehearsalSession = {
+  id: string;
+  workspaceId: string;
+  productId: string;
+  prospectId: string;
+  callSessionId: string;
+  bridgeSessionId: string;
+  createdAt: string;
+};
+
+const localRehearsalSessions = new Map<string, LocalRehearsalSession>();
+
 app.get("/health", (_request, response) => {
   response.json({ ok: true });
+});
+
+app.post("/local-rehearsal/sessions", async (request: WorkspaceRequest, response) => {
+  const workspaceId = request.workspaceId ?? loadEnv().defaultWorkspaceId;
+  const input = localRehearsalCreateSchema.parse(request.body ?? {});
+  const correlationId = request.header("x-correlation-id") ?? createCorrelationId();
+
+  const now = new Date().toISOString();
+  const product = await db.putProduct({
+    id: crypto.randomUUID(),
+    workspaceId,
+    name: input.productName,
+    description: input.productDescription,
+    offerSummary: input.offerSummary,
+    icpSummary: input.icpSummary,
+    createdAt: now
+  });
+
+  const workflow = await withTemporaryEnv(
+    {
+      SONETEL_ENABLE_LIVE_OUTBOUND: "false"
+    },
+    () =>
+      runDirectLeadWorkflow({
+        workspaceId,
+        productId: product.id,
+        companyName: input.companyName,
+        companyWebsite: input.companyWebsite,
+        phoneNumber: input.phoneNumber,
+        contactName: input.contactName,
+        contactTitle: input.contactTitle,
+        notes: input.notes,
+        autoStart: true
+      })
+  );
+
+  if (!workflow.callSession || !workflow.bridgeSession) {
+    response.status(500).json({ error: "Failed to initialize local rehearsal session." });
+    return;
+  }
+
+  await ingestBridgeEvent(
+    workflow.bridgeSession.id,
+    {
+      event: "session.connected",
+      metadata: {
+        source: "local-rehearsal-api"
+      }
+    },
+    correlationId
+  );
+
+  await waitForFreshAgentTurn(workflow.callSession.id, 0, 30000);
+
+  const sessionId = `rehearsal_${crypto.randomUUID()}`;
+  const session: LocalRehearsalSession = {
+    id: sessionId,
+    workspaceId,
+    productId: product.id,
+    prospectId: workflow.prospect.id,
+    callSessionId: workflow.callSession.id,
+    bridgeSessionId: workflow.bridgeSession.id,
+    createdAt: now
+  };
+  localRehearsalSessions.set(sessionId, session);
+
+  response.status(201).json({
+    sessionId,
+    product,
+    prospect: workflow.prospect,
+    researchPacket: workflow.researchPacket,
+    callBrief: workflow.callBrief,
+    transcriptTurns: await db.listTranscriptTurns(workflow.callSession.id),
+    snapshot: await buildLocalRehearsalSnapshot(session)
+  });
+});
+
+app.get("/local-rehearsal/sessions/:id", async (request: WorkspaceRequest, response) => {
+  const session = getLocalRehearsalSession(getRouteParam(request.params.id), request.workspaceId);
+  if (!session) {
+    response.status(404).json({ error: "Local rehearsal session not found" });
+    return;
+  }
+
+  response.json({
+    session,
+    snapshot: await buildLocalRehearsalSnapshot(session),
+    transcriptTurns: await db.listTranscriptTurns(session.callSessionId)
+  });
+});
+
+app.post("/local-rehearsal/sessions/:id/messages", async (request: WorkspaceRequest, response) => {
+  const session = getLocalRehearsalSession(getRouteParam(request.params.id), request.workspaceId);
+  if (!session) {
+    response.status(404).json({ error: "Local rehearsal session not found" });
+    return;
+  }
+
+  const input = localRehearsalMessageSchema.parse(request.body);
+  const correlationId = request.header("x-correlation-id") ?? createCorrelationId();
+  const turnsBefore = await db.listTranscriptTurns(session.callSessionId);
+  const previousAgentTurnCount = turnsBefore.filter((turn) => turn.speaker === "agent").length;
+
+  await ingestBridgeEvent(
+    session.bridgeSessionId,
+    {
+      event: "prospect.message",
+      text: input.text,
+      speaker: "prospect",
+      metadata: {
+        source: "local-rehearsal-api"
+      }
+    },
+    correlationId
+  );
+
+  await waitForFreshAgentTurn(session.callSessionId, previousAgentTurnCount, 30000);
+  const transcriptTurns = await db.listTranscriptTurns(session.callSessionId);
+
+  response.json({
+    ok: true,
+    transcriptTurns,
+    newTurns: transcriptTurns.slice(turnsBefore.length),
+    snapshot: await buildLocalRehearsalSnapshot(session)
+  });
+});
+
+app.post("/local-rehearsal/sessions/:id/complete", async (request: WorkspaceRequest, response) => {
+  const session = getLocalRehearsalSession(getRouteParam(request.params.id), request.workspaceId);
+  if (!session) {
+    response.status(404).json({ error: "Local rehearsal session not found" });
+    return;
+  }
+
+  const correlationId = request.header("x-correlation-id") ?? createCorrelationId();
+  await ingestBridgeEvent(
+    session.bridgeSessionId,
+    {
+      event: "session.completed",
+      outcome: "disconnected",
+      followupSummary: "Local rehearsal completed."
+    },
+    correlationId
+  );
+
+  response.json({
+    ok: true,
+    transcriptTurns: await db.listTranscriptTurns(session.callSessionId),
+    snapshot: await buildLocalRehearsalSnapshot(session)
+  });
 });
 
 app.get("/diagnostics/summary", async (request: WorkspaceRequest, response) => {
@@ -818,6 +1005,79 @@ function sanitizeOperator(operator: {
     createdAt: operator.createdAt,
     lastLoginAt: operator.lastLoginAt
   };
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForFreshAgentTurn(callSessionId: string, previousAgentTurnCount: number, timeoutMs: number) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const turns = await db.listTranscriptTurns(callSessionId);
+    const agentTurnCount = turns.filter((turn) => turn.speaker === "agent").length;
+    if (agentTurnCount > previousAgentTurnCount) {
+      return turns;
+    }
+
+    await wait(400);
+  }
+
+  throw new Error("Timed out waiting for the realtime agent to respond.");
+}
+
+function getLocalRehearsalSession(sessionId: string, workspaceId?: string) {
+  const session = localRehearsalSessions.get(sessionId);
+  if (!session) {
+    return undefined;
+  }
+
+  if (workspaceId && session.workspaceId !== workspaceId) {
+    return undefined;
+  }
+
+  return session;
+}
+
+async function buildLocalRehearsalSnapshot(session: LocalRehearsalSession) {
+  const [callSession, bridgeSession, followups, sequencePlans] = await Promise.all([
+    db.getCallSession(session.callSessionId),
+    getBridgeSession(session.bridgeSessionId),
+    db.listFollowupsByProspectId(session.prospectId),
+    db.listSequencePlansByProspectId(session.prospectId)
+  ]);
+
+  return {
+    callStatus: callSession?.status ?? null,
+    outcome: callSession?.outcome ?? null,
+    bridgeStatus: bridgeSession?.status ?? null,
+    transcriptTurns: (await db.listTranscriptTurns(session.callSessionId)).length,
+    followupCount: followups.length,
+    latestSequencePlan: sequencePlans.at(-1) ?? null
+  };
+}
+
+async function withTemporaryEnv<T>(
+  overrides: Record<string, string>,
+  operation: () => Promise<T>
+): Promise<T> {
+  const previous = new Map<string, string | undefined>();
+  for (const [key, value] of Object.entries(overrides)) {
+    previous.set(key, process.env[key]);
+    process.env[key] = value;
+  }
+
+  try {
+    return await operation();
+  } finally {
+    for (const [key, value] of previous.entries()) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
 }
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {

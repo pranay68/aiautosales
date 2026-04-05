@@ -1,4 +1,5 @@
 import { db } from "@aiautosales/db";
+import { createBridgeSession as createBridgeSessionInProcess } from "@aiautosales/bridge-gateway";
 import { queueOutboundCall } from "@aiautosales/dialer-service";
 import type {
   CallBrief,
@@ -180,25 +181,43 @@ async function createLiveBridgeSession(input: {
 }) {
   const env = loadEnv();
   const bridgeBaseUrl = env.bridgeGatewayPublicBaseUrl || `http://127.0.0.1:${env.bridgeGatewayPort}`;
-  const response = await fetch(`${bridgeBaseUrl}/bridge-sessions`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-correlation-id": input.correlationId
-    },
-    body: JSON.stringify({
+  try {
+    const response = await fetch(`${bridgeBaseUrl}/bridge-sessions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-correlation-id": input.correlationId
+      },
+      body: JSON.stringify({
+        callSessionId: input.callSessionId,
+        prospectId: input.prospectId,
+        transport: env.sonetelEnableLiveOutbound ? "sip" : "simulation",
+        agentDestination: input.agentDestination
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Bridge session creation failed with status ${response.status}: ${await response.text()}`);
+    }
+
+    return (await response.json()) as { bridgeSession: BridgeSession };
+  } catch (error) {
+    const isLocalBridge =
+      bridgeBaseUrl.includes("127.0.0.1") || bridgeBaseUrl.includes("localhost");
+    if (!isLocalBridge) {
+      throw error;
+    }
+
+    const result = await createBridgeSessionInProcess({
       callSessionId: input.callSessionId,
       prospectId: input.prospectId,
-      transport: "sip",
-      agentDestination: input.agentDestination
-    })
-  });
+      transport: env.sonetelEnableLiveOutbound ? "sip" : "simulation",
+      agentDestination: input.agentDestination,
+      correlationId: input.correlationId
+    });
 
-  if (!response.ok) {
-    throw new Error(`Bridge session creation failed with status ${response.status}: ${await response.text()}`);
+    return { bridgeSession: result.bridgeSession };
   }
-
-  return (await response.json()) as { bridgeSession: BridgeSession };
 }
 
 function runPolicyGate(prospectId: string, callBrief: CallBrief, request: DirectCallRequest): PolicyDecision {
